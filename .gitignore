@@ -11,3 +11,5 @@ foldvla/
 foldvla_net/
 
 **/tmp/**
+
+.vscode/**

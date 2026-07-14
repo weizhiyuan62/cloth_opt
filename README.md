@@ -33,15 +33,8 @@ pip install -e .
 
 - run pip install -e . again if c++ source code modified.
 
-To include the fixed-camera video dependencies in a reproducible environment:
 
-```bash
-conda env create -f environment.yml
-conda activate clothopt
-python -m pip install -e . --no-build-isolation
-```
-
-### Hydra-managed position rollout
+### rollout
 
 `scripts/demo.py` is the position-control-only rollout entry point. Like
 FoldVLA, Hydra composes the environment, trajectory strategy, and rendering
@@ -67,6 +60,8 @@ python scripts/demo.py \
   trajectory.position_gain=1200 \
   trajectory.frames_per_segment=50 \
   env.scene.stiffness=1000
+
+
 ```
 
 Run a Hydra parameter sweep:

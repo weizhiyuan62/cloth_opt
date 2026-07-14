@@ -1,7 +1,7 @@
 enabled: true
 backend: matplotlib
 keep_frames: false
-fps: 30
+fps: 50
 camera:
   elevation: 25.0
   azimuth: -45.0

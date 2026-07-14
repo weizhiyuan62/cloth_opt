@@ -1,7 +1,7 @@
 defaults:
   - env: default
   - task: symmetric_fold
-  - render: disabled
+  - render: enabled
   - _self_
 
 seed: 0
@@ -10,7 +10,7 @@ seed: 0
 # table friction, which the current simulator does not yet model dynamically.
 env:
   reset_height: 0.02
-  n_substeps: 5
+  n_substeps: 10
 
 hydra:
   run:

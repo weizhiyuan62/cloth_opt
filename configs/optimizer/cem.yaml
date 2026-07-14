@@ -1,0 +1,23 @@
+name: cem
+population_size: 24
+iterations: 8
+elite_fraction: 0.25
+initial_std_fraction: 0.20
+smoothing: 0.20
+minimum_std_fraction: 0.01
+seed: ${seed}
+
+parameter_names:
+  - lift_height
+  - arc_height
+  - landing_offset
+  - place_clearance
+  - layer_gap
+  - lift_frames
+  - transfer_frames
+  - place_frames
+  - position_gain
+  - max_force
+
+lower_bounds: [0.05, 0.00, -0.10, 0.01, 0.002, 5, 20, 5, 200, 20]
+upper_bounds: [0.50, 0.50,  0.10, 0.15, 0.050, 60, 120, 60, 2000, 250]

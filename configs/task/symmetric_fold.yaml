@@ -1,0 +1,24 @@
+controlled_edge: bottom
+anchor_edge: top
+initial_settle_frames: 20
+final_settle_frames: 40
+
+parameters:
+  lift_height: 0.20
+  arc_height: 0.20
+  landing_offset: 0.00
+  place_clearance: 0.04
+  layer_gap: 0.01
+  lift_frames: 20
+  transfer_frames: 50
+  place_frames: 20
+  position_gain: 800.0
+  max_force: 100.0
+
+objective:
+  alignment_weight: 10.0
+  stretch_weight: 1.0
+  terminal_velocity_weight: 0.5
+  smoothness_weight: 0.05
+  success_alignment: 0.08
+  success_max_speed: 0.10

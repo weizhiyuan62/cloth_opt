@@ -95,6 +95,84 @@ configs/
     └── debug.yaml
 ```
 
+### Symmetric-fold state machine and optimization
+
+The first optimization task folds the bottom half of the cloth onto the top
+half. Its fixed high-level state machine is:
+
+```text
+initial_settle -> lift -> transfer -> place -> release -> final_settle
+```
+
+Every active control command is position control. The top edge is pinned as a
+temporary proxy for table friction, while the bottom edge follows the staged
+trajectory. Run the hand-initialized baseline with:
+
+```bash
+conda activate clothopt
+python scripts/symmetric_fold.py
+```
+
+Enable the optional debug video with:
+
+```bash
+python scripts/symmetric_fold.py render=debug
+```
+
+The baseline parameters and objective weights are defined in
+`configs/task/symmetric_fold.yaml`. Individual values can be overridden from
+the command line:
+
+```bash
+python scripts/symmetric_fold.py \
+  task.parameters.lift_height=0.25 \
+  task.parameters.arc_height=0.30 \
+  task.parameters.transfer_frames=70
+```
+
+Use the cross-entropy method (CEM) to optimize the continuous parameters of
+the same state machine:
+
+```bash
+python scripts/optimize.py
+```
+
+For a small cloud smoke experiment before launching the full search:
+
+```bash
+python scripts/optimize.py \
+  optimizer.population_size=4 \
+  optimizer.iterations=1
+```
+
+The default search optimizes lift height, transfer arc, landing offset,
+placement clearance, layer gap, phase durations, position gain, and maximum
+force. Bounds and CEM settings are in `configs/optimizer/cem.yaml`. The output
+contains:
+
+```text
+outputs/optimize/<date>/<time>/
+├── .hydra/
+├── optimization_history.json
+├── optimization_summary.json
+└── best/
+    ├── parameters.json
+    ├── metrics.json
+    ├── actions.json
+    ├── trajectory.npz
+    └── final.obj
+```
+
+The current objective combines vertex-pair alignment, structural stretch,
+terminal velocity, and target-trajectory smoothness. `success` additionally
+checks alignment and maximum terminal speed.
+
+Important limitation: the current C++ engine does not yet implement cloth
+self-collision. This symmetric-fold task is therefore a geometry/trajectory
+optimization proxy; an optimizer may still exploit layer penetration. Add
+self-collision or an explicit penetration penalty before treating the metric
+as a physically complete folding benchmark.
+
 ## System Requirements (Tested)
 
 - **OS**: Ubuntu 24.04 LTS

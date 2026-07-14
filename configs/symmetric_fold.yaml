@@ -1,0 +1,34 @@
+defaults:
+  - env: default
+  - task: symmetric_fold
+  - render: disabled
+  - _self_
+
+seed: 0
+
+# Start close to the table. The top edge is pinned by the task as a proxy for
+# table friction, which the current simulator does not yet model dynamically.
+env:
+  reset_height: 0.02
+  n_substeps: 5
+
+hydra:
+  run:
+    dir: outputs/symmetric_fold/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job:
+    chdir: true
+  job_logging:
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        level: INFO
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        formatter: simple
+        level: INFO
+        filename: ${hydra.runtime.output_dir}/${hydra.job.name}.log
+    root:
+      level: INFO
+      handlers: [console, file]

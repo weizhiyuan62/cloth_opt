@@ -3,25 +3,14 @@
 A demo for cloth simulation with intelligent control.
 
 ## Python optimization interface
-
-The simulator can be used from Python while keeping the physics, controller,
-and integrator in C++. The Python stack follows the same separation used by
-FoldVLA:
-
-```text
-Python policy / optimizer
-        -> ClothEnv
-        -> ClothOptEngine
-        -> cloth_opt._core (pybind11)
-        -> existing C++ ClothMesh / ClothController / Integrator
-```
+- use `pybind` to build the interface to the simulator
 
 The original `Visualization`, `Simulation`, and `Optimization` executables are
 unchanged and can still be built with the original CMake project.
 
 ### Install
 
-Python 3.9+ and a C++17 compiler are required. The build dependencies and the
+Python 3.10+ and a C++17 compiler are required. The build dependencies and the
 C++ extension are handled by pip:
 
 ```bash
@@ -36,10 +25,7 @@ pip install -e .
 
 ### rollout
 
-`scripts/demo.py` is the position-control-only rollout entry point. Like
-FoldVLA, Hydra composes the environment, policy, and rendering
-configuration, changes into a unique run directory, and stores the exact
-configuration under `.hydra/`:
+`scripts/demo.py` is the position-control-only rollout entry point. 
 
 ```bash
 conda activate clothopt
@@ -53,47 +39,8 @@ needed:
 python scripts/demo.py render=enabled
 ```
 
-Override any setting without editing a configuration file:
 
-```bash
-python scripts/demo.py \
-  trajectory.position_gain=1200 \
-  trajectory.frames_per_segment=50 \
-  env.scene.stiffness=1000
-
-
-```
-
-Run a Hydra parameter sweep:
-
-```bash
-python scripts/demo.py -m \
-  trajectory.position_gain=400,800,1200 \
-  env.scene.stiffness=600,1000 \
-  render=disabled
-```
-
-Single runs are written to `outputs/YYYY-MM-DD/HH-MM-SS/`; multiruns go to
-`outputs/multirun/`. Each run contains `.hydra/`, `demo.log`, `metrics.json`,
-`trajectory.npz`, `actions.json`, and `final.obj`. With `render=enabled`, it also
-contains `trajectory.mp4`.
-
-Hydra configuration groups:
-
-```text
-configs/
-├── demo.yaml
-├── env/default.yaml
-├── policy/
-│   ├── symmetric_fold.yaml
-│   └── diagonal_fold.yaml
-├── trajectory/edge_position.yaml
-└── render/
-    ├── disabled.yaml
-    └── enabled.yaml
-```
-
-### Symmetric-fold state machine and optimization
+### Symmetric-fold state machine
 
 The first optimization task folds the bottom half of the cloth onto the top
 half. Its fixed high-level state machine is:
@@ -388,143 +335,3 @@ cloth.properties.gravity = Eigen::Vector3d(0, -9.81, 0);
 - **Optimized collision detection** for real-time performance
 - **Adaptive time stepping** for stability
 - **Memory-efficient** data structures
-
-## API Reference
-
-### ClothMesh Class
-
-```cpp
-// Create cloth grid
-cloth.createGrid(width, height, spacing);
-
-// Set properties
-cloth.properties.stiffness = 1000.0;
-cloth.properties.damping = 0.9;
-
-// Pin vertices
-cloth.pinVertex(vertexIndex);
-
-// Add collision objects
-cloth.addSphere(center, radius);
-
-// Access vertices
-Eigen::Vector3d pos = cloth.getVertex(index).position;
-cloth.setVertexPosition(index, newPosition);
-```
-
-### ClothController Class
-
-```cpp
-// Position control
-controller.addPositionControl(vertexIndex, target, gain, maxForce);
-controller.updatePositionTarget(vertexIndex, newTarget);
-
-// Force control
-controller.addForceControl(vertexIndex, force);
-controller.updateForceTarget(vertexIndex, newForce);
-
-// Apply controls in simulation loop
-controller.applyControls(cloth, dt);
-
-// Utility functions
-bool isControlled = controller.isControlled(vertexIndex);
-auto vertices = controller.getControlledVertices();
-controller.removeControl(vertexIndex);
-```
-
-### Integrator Class
-
-```cpp
-// Create and configure integrator
-auto integrator = std::make_unique<SemiImplicitEulerIntegrator>();
-integrator->enableDebug(true);
-integrator->setDebugFrequency(30);
-
-// Simulation step
-integrator->step(cloth, dt);
-```
-
-## TODO Guide
-
-### Future Development Tasks
-
-#### 1. Enhanced Collision Detection System
-
-**Objective**: Improve collision detection performance and support mesh-to-mesh collisions
-
-**Tasks**:
-- Implement spatial hashing or BVH (Bounding Volume Hierarchy) for faster collision queries
-- Add mesh-to-mesh collision detection algorithms (without friction consideration)
-- Optimize vertex-face and edge-edge collision handling for cloth self-collision
-- Integrate continuous collision detection to prevent tunneling through fast-moving objects
-
-**Technical Requirements**:
-```cpp
-// Enhanced collision interface
-cloth.addMeshCollision(meshVertices, meshTriangles);
-cloth.enableSelfCollision(true);
-cloth.setSpatialHashingResolution(gridSize);
-
-// Performance monitoring
-CollisionStats stats = cloth.getCollisionStatistics();
-```
-
-**Expected Outcome**: Real-time cloth simulation with complex collision scenarios including cloth-cloth and cloth-object interactions.
-
-
-#### 2. Optimization-Based Cloth Folding Trajectories
-
-**Objective**: Use controller optimization APIs to generate automated folding motions, we may need to improve the simulation pipeline and performance.
-
-**Tasks**:
-- **Symmetric Fold Optimization**: Develop algorithm to fold cloth in half along center line
-  - Analyze cloth geometry to find optimal fold line
-  - Generate smooth trajectory that brings opposite edges together
-  - Minimize cloth stretching and energy during folding motion
-  
-- **Diagonal Fold Optimization**: Create corner-to-corner diagonal folding trajectories
-  - Identify diagonal fold patterns (corner-to-opposite-corner)
-  - Optimize vertex paths to achieve clean diagonal creases
-  - Handle intermediate vertex positioning to avoid collisions
-
-**Implementation Approach**:
-```cpp
-// Optimization-based trajectory planning
-class FoldingOptimizer {
-public:
-    // Generate symmetric fold trajectory
-    std::vector<TrajectoryPoint> optimizeSymmetricFold(
-        const ClothMesh& cloth, 
-        FoldDirection direction,
-        double foldDuration = 5.0
-    );
-    
-    // Generate diagonal fold trajectory  
-    std::vector<TrajectoryPoint> optimizeDiagonalFold(
-        const ClothMesh& cloth,
-        Corner startCorner,
-        Corner endCorner,
-        double foldDuration = 6.0
-    );
-    
-    // Apply optimized trajectory to controller
-    void applyFoldingTrajectory(
-        ClothController& controller,
-        const std::vector<TrajectoryPoint>& trajectory
-    );
-};
-```
-
-**Optimization Criteria**:
-- Minimize total energy expenditure during folding
-- Achieve target fold configuration with minimal cloth distortion  
-- Ensure smooth, physically plausible motion paths
-- Avoid self-intersections and excessive stretching
-
-**Success Metrics**:
-- Generate visually appealing folding animations (aesthetic quality > 70%)
-- Complete fold within specified time duration
-- Maintain cloth structural integrity throughout motion
-- Demonstrate reproducible results across different cloth sizes
-
-**Note**: Accuracy target is exploratory research - focus on feasible trajectory generation rather than perfect fold precision.

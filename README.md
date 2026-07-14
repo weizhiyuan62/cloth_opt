@@ -33,6 +33,14 @@ pip install -e .
 
 - run pip install -e . again if c++ source code modified.
 
+To include the fixed-camera video dependencies in a reproducible environment:
+
+```bash
+conda env create -f environment.yml
+conda activate clothopt
+python -m pip install -e . --no-build-isolation
+```
+
 ### Run the control demo
 
 ```bash
@@ -60,6 +68,22 @@ Use `configs/sim_cloth.json` to configure the grid, material properties,
 timestep, control substeps, and output directory. New optimization strategies
 should implement the small policy interface in `src/cloth_opt/policy/base.py`
 and return `ClothAction` objects.
+
+### Position-control trajectory and video
+
+`demo.py` is the position-control-only rollout intended as the starting point
+for optimization:
+
+```bash
+conda activate clothopt
+python demo.py
+```
+
+It moves the bottom cloth edge through piecewise-linear position waypoints and
+saves `trajectory.npz`, `actions.json`, `final.obj`, and one fixed-camera
+`trajectory.mp4` in a timestamped directory under `outputs/`. Use `--no-video`
+for numerical-only rollouts or `--keep-frames` to preserve the PNG frames.
+Trajectory and camera settings are in `configs/position_demo.json`.
 
 ## System Requirements (Tested)
 

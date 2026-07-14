@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.23"]
 
+[project.optional-dependencies]
+video = ["matplotlib>=3.7"]
+
 [tool.scikit-build]
 cmake.source-dir = "python"
 wheel.packages = ["src/cloth_opt"]

@@ -1,0 +1,13 @@
+name: clothopt
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy>=1.23
+  - matplotlib>=3.7
+  - ffmpeg>=6
+  - cmake>=3.15
+  - ninja
+  - pybind11>=2.12
+  - scikit-build-core>=0.10
+  - pip

@@ -1,6 +1,6 @@
 defaults:
   - env: default
-  - task: symmetric_fold
+  - policy: symmetric_fold
   - optimizer: cem
   - render: disabled
   - _self_

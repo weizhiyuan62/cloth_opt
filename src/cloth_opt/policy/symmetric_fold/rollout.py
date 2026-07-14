@@ -3,41 +3,28 @@ import shutil
 
 from omegaconf import DictConfig, OmegaConf
 
-from cloth_opt.engine import SceneConfig
-from cloth_opt.env import ClothEnvConfig
-from cloth_opt.render import SingleCameraRenderer, frames_to_video
-from cloth_opt.tasks import (
+from cloth_opt.sim import ClothEnvConfig, SingleCameraRenderer, frames_to_video
+from .rule_policy import (
     SymmetricFoldParameters,
     SymmetricFoldResult,
-    SymmetricFoldTaskConfig,
+    SymmetricFoldPolicyConfig,
 )
 
 
-def make_env_config(cfg: DictConfig) -> ClothEnvConfig:
-    scene_values = OmegaConf.to_container(cfg.env.scene, resolve=True)
-    assert isinstance(scene_values, dict)
-    return ClothEnvConfig(
-        scene=SceneConfig(**scene_values),
-        n_substeps=int(cfg.env.n_substeps),
-        reset_height=float(cfg.env.reset_height),
-        pin_corners=bool(cfg.env.pin_corners),
-    )
-
-
-def make_fold_task_config(traj_cfg: DictConfig) -> SymmetricFoldTaskConfig:
-    objective = OmegaConf.to_container(traj_cfg.objective, resolve=True)
+def make_symmetric_policy_config(policy_cfg: DictConfig) -> SymmetricFoldPolicyConfig:
+    objective = OmegaConf.to_container(policy_cfg.objective, resolve=True)
     assert isinstance(objective, dict)
-    return SymmetricFoldTaskConfig(
-        controlled_edge=str(traj_cfg.task.controlled_edge),
-        anchor_edge=str(traj_cfg.task.anchor_edge),
-        initial_settle_frames=int(traj_cfg.task.initial_settle_frames),
-        final_settle_frames=int(traj_cfg.task.final_settle_frames),
+    return SymmetricFoldPolicyConfig(
+        controlled_edge=str(policy_cfg.setup.controlled_edge),
+        anchor_edge=str(policy_cfg.setup.anchor_edge),
+        initial_settle_frames=int(policy_cfg.setup.initial_settle_frames),
+        final_settle_frames=int(policy_cfg.setup.final_settle_frames),
         **objective,
     )
 
 
 def make_fold_parameters(cfg: DictConfig) -> SymmetricFoldParameters:
-    values = OmegaConf.to_container(cfg.traj_cfg.rules, resolve=True)
+    values = OmegaConf.to_container(cfg.policy.params, resolve=True)
     assert isinstance(values, dict)
     return SymmetricFoldParameters.from_mapping(values)
 

@@ -1,6 +1,4 @@
-from .action import ClothAction
-from .engine import ClothOptEngine, SceneConfig
-from .env import ClothEnv, ClothEnvConfig
+from .sim import ClothAction, ClothEnv, ClothEnvConfig, ClothOptEngine, SceneConfig
 
 __all__ = [
     "ClothAction",

@@ -8,14 +8,15 @@ import hydra
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
-from cloth_opt.experiments import (
-    make_env_config,
+from cloth_opt.policy.symmetric_fold import (
+    SymmetricFoldParameters,
+    SymmetricFoldPolicy,
     make_fold_parameters,
-    make_fold_task_config,
+    make_symmetric_policy_config,
     render_fold_result,
 )
 from cloth_opt.optimization import CEMConfig, optimize_cem
-from cloth_opt.tasks import SymmetricFoldParameters, SymmetricFoldTask
+from cloth_opt.sim import make_env_config
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ def main(cfg: DictConfig) -> None:
     OmegaConf.save(cfg, run_dir / ".hydra" / "resolved.yaml", resolve=True)
 
     env_config = make_env_config(cfg)
-    task = SymmetricFoldTask(env_config, make_fold_task_config(cfg))
+    policy = SymmetricFoldPolicy(env_config, make_symmetric_policy_config(cfg.policy))
     initial = make_fold_parameters(cfg)
     parameter_names = list(cfg.optimizer.parameter_names)
     initial_vector = np.asarray([getattr(initial, name) for name in parameter_names], dtype=np.float64)
@@ -45,7 +46,7 @@ def main(cfg: DictConfig) -> None:
         nonlocal evaluation_count
         evaluation_count += 1
         try:
-            result = task.rollout(decode(vector), record=False)
+            result = policy.rollout(decode(vector), record=False)
             loss = result.loss
             if not np.isfinite(loss):
                 logger.warning("rollout %d returned non-finite loss", evaluation_count)
@@ -82,7 +83,7 @@ def main(cfg: DictConfig) -> None:
         objective, initial_vector, lower_bounds, upper_bounds, cem_config, on_iteration
     )
     best_parameters = decode(optimization.best_parameters)
-    best_result = task.rollout(best_parameters, record=True)
+    best_result = policy.rollout(best_parameters, record=True)
     best_dir = run_dir / "best"
     best_result.save(best_dir)
     render_fold_result(best_result, env_config, cfg.render, best_dir)

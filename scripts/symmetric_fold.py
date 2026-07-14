@@ -7,13 +7,13 @@ import hydra
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
-from cloth_opt.experiments import (
-    make_env_config,
+from cloth_opt.policy.symmetric_fold import (
+    SymmetricFoldPolicy,
     make_fold_parameters,
-    make_fold_task_config,
+    make_symmetric_policy_config,
     render_fold_result,
 )
-from cloth_opt.tasks import SymmetricFoldTask
+from cloth_opt.sim import make_env_config
 
 
 logger = logging.getLogger(__name__)
@@ -26,10 +26,10 @@ def main(cfg: DictConfig) -> None:
     OmegaConf.save(cfg, run_dir / ".hydra" / "resolved.yaml", resolve=True)
 
     env_config = make_env_config(cfg)
-    task = SymmetricFoldTask(env_config, make_fold_task_config(cfg.traj_cfg))
+    policy = SymmetricFoldPolicy(env_config, make_symmetric_policy_config(cfg.policy))
     parameters = make_fold_parameters(cfg)
     logger.info("running symmetric-fold baseline with %s", parameters)
-    result = task.rollout(parameters, record=True)
+    result = policy.rollout(parameters, record=True)
     result.save(run_dir)
     render_fold_result(result, env_config, cfg.render, run_dir)
 

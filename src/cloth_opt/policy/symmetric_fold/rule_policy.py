@@ -6,8 +6,7 @@ from typing import Any, Callable, Mapping
 
 import numpy as np
 
-from cloth_opt.action import ClothAction
-from cloth_opt.env import ClothEnv, ClothEnvConfig
+from cloth_opt.sim import ClothAction, ClothEnv, ClothEnvConfig
 
 
 class FoldPhase(str, Enum):
@@ -52,7 +51,7 @@ class SymmetricFoldParameters:
 
 
 @dataclass(frozen=True)
-class SymmetricFoldTaskConfig:
+class SymmetricFoldPolicyConfig:
     controlled_edge: str = "bottom"
     anchor_edge: str = "top"
     initial_settle_frames: int = 20
@@ -65,7 +64,7 @@ class SymmetricFoldTaskConfig:
     success_max_speed: float = 0.10
 
     @classmethod
-    def from_mapping(cls, values: Mapping[str, Any]) -> "SymmetricFoldTaskConfig":
+    def from_mapping(cls, values: Mapping[str, Any]) -> "SymmetricFoldPolicyConfig":
         return cls(**dict(values))
 
 
@@ -132,13 +131,13 @@ class SymmetricFoldStateMachine:
         destination_targets: np.ndarray,
         controlled_indices: np.ndarray,
         parameters: SymmetricFoldParameters,
-        task_config: SymmetricFoldTaskConfig,
+        policy_config: SymmetricFoldPolicyConfig,
     ) -> None:
         self.start_targets = start_targets.copy()
         self.destination_targets = destination_targets.copy()
         self.controlled_indices = controlled_indices.copy()
         self.parameters = parameters
-        self.task_config = task_config
+        self.policy_config = policy_config
         self.phase = FoldPhase.INITIAL_SETTLE
         self.phase_frame = 0
 
@@ -156,7 +155,7 @@ class SymmetricFoldStateMachine:
         return self.phase == FoldPhase.DONE
 
     def _duration(self) -> int:
-        p, c = self.parameters, self.task_config
+        p, c = self.parameters, self.policy_config
         return {
             FoldPhase.INITIAL_SETTLE: c.initial_settle_frames,
             FoldPhase.LIFT: p.lift_frames,
@@ -227,14 +226,14 @@ class SymmetricFoldStateMachine:
         )
 
 
-class SymmetricFoldTask:
+class SymmetricFoldPolicy:
     def __init__(
         self,
         env_config: ClothEnvConfig,
-        task_config: SymmetricFoldTaskConfig,
+        policy_config: SymmetricFoldPolicyConfig,
     ) -> None:
         self.env_config = env_config
-        self.task_config = task_config
+        self.policy_config = policy_config
 
     def _edge_indices(self, env: ClothEnv, edge: str) -> np.ndarray:
         scene = env.config.scene
@@ -252,10 +251,10 @@ class SymmetricFoldTask:
 
     def _fold_correspondence(self, env: ClothEnv) -> tuple[np.ndarray, np.ndarray]:
         scene = env.config.scene
-        if self.task_config.controlled_edge not in {"top", "bottom"}:
+        if self.policy_config.controlled_edge not in {"top", "bottom"}:
             raise NotImplementedError("symmetric fold currently supports top/bottom folds")
         half = scene.height // 2
-        moving_rows = range(half, scene.height) if self.task_config.controlled_edge == "bottom" else range(half)
+        moving_rows = range(half, scene.height) if self.policy_config.controlled_edge == "bottom" else range(half)
         moving, stationary = [], []
         for row in moving_rows:
             partner_row = scene.height - 1 - row
@@ -272,8 +271,8 @@ class SymmetricFoldTask:
     ) -> SymmetricFoldResult:
         env = ClothEnv(self.env_config)
         observation = env.reset()
-        controlled = self._edge_indices(env, self.task_config.controlled_edge)
-        anchor = self._edge_indices(env, self.task_config.anchor_edge)
+        controlled = self._edge_indices(env, self.policy_config.controlled_edge)
+        anchor = self._edge_indices(env, self.policy_config.anchor_edge)
         pin_flags = env.engine.get_cloth_pin_flags()
         pin_flags[anchor] = True
         env.engine.set_cloth_pin_flags(pin_flags)
@@ -284,7 +283,7 @@ class SymmetricFoldTask:
         if len(destination) != len(controlled):
             raise ValueError("controlled and anchor edges must have equal vertex counts")
         machine = SymmetricFoldStateMachine(
-            start_targets, destination, controlled, parameters, self.task_config
+            start_targets, destination, controlled, parameters, self.policy_config
         )
 
         positions_all = [observation["positions"].copy()] if record else None
@@ -350,6 +349,8 @@ class SymmetricFoldTask:
 
         scene = env.config.scene
         stretch_values = []
+
+        # Compute stretch error for each edge in the cloth mesh:
         for row in range(scene.height):
             for column in range(scene.width):
                 index = env.engine.grid_index(row, column)
@@ -369,7 +370,9 @@ class SymmetricFoldTask:
         else:
             smoothness = 0.0
 
-        c = self.task_config
+        c = self.policy_config
+
+        # weighed loss function that combines alignment, stretch, terminal velocity, and smoothness
         loss = (
             c.alignment_weight * alignment
             + c.stretch_weight * stretch

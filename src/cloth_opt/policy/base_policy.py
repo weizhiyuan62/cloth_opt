@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from cloth_opt.action import ClothAction
+from cloth_opt.sim.action import ClothAction
 
 
 class BasePolicy(ABC):

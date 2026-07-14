@@ -10,8 +10,14 @@ import hydra
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
-from cloth_opt import ClothAction, ClothEnv, ClothEnvConfig, SceneConfig
-from cloth_opt.render import SingleCameraRenderer, frames_to_video
+from cloth_opt.sim import (
+    ClothAction,
+    ClothEnv,
+    ClothEnvConfig,
+    SceneConfig,
+    SingleCameraRenderer,
+    frames_to_video,
+)
 
 
 logger = logging.getLogger(__name__)

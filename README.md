@@ -25,19 +25,18 @@ Python 3.9+ and a C++17 compiler are required. The build dependencies and the
 C++ extension are handled by pip:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
+cd cloth_opt
+conda create -n clothopt python=3.10.16 -y
+conda activate clothopt
+pip install -e .
 ```
 
-After changing only Python policy or optimization code, rebuilding is not
-needed. Run `python -m pip install -e .` again after changing C++ headers,
-sources, or `python/bindings.cpp`.
+- run pip install -e . again if c++ source code modified.
 
 ### Run the control demo
 
 ```bash
-source .venv/bin/activate
+conda activate clothopt
 python scripts/sim_cloth.py
 ```
 

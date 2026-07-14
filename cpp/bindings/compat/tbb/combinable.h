@@ -1,5 +1,7 @@
 #pragma once
 
+// Serial compatibility subset used when oneTBB is unavailable.
+
 namespace tbb {
 
 template <class Value>

@@ -1,7 +1,7 @@
-#ifndef CLOTH_H
-#define CLOTH_H
+#ifndef CLOTH_OPT_CLOTH_H
+#define CLOTH_OPT_CLOTH_H
 
-#include "mesh.h"
+#include "cloth_opt/mesh.h"
 #include <Eigen/Geometry>
 #include <vector>
 
@@ -74,4 +74,4 @@ private:
 
 } // namespace ClothOpt
 
-#endif // CLOTH_H
+#endif // CLOTH_OPT_CLOTH_H

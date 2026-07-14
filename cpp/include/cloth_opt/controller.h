@@ -1,5 +1,7 @@
 #pragma once
 
+// Public controller API for the ClothOpt C++ core.
+
 #include <Eigen/Dense>
 #include <vector>
 #include <unordered_map>

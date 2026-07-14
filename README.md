@@ -71,12 +71,12 @@ and return `ClothAction` objects.
 
 ### Position-control trajectory and video
 
-`demo.py` is the position-control-only rollout intended as the starting point
+`scripts/demo.py` is the position-control-only rollout intended as the starting point
 for optimization:
 
 ```bash
 conda activate clothopt
-python demo.py
+python scripts/demo.py
 ```
 
 It moves the bottom cloth edge through piecewise-linear position waypoints and
@@ -174,20 +174,16 @@ You should see these executables:
 
 ```
 cloth_opt/
-├── include/          
-│   ├── cloth.h       # Cloth mesh and physics
-│   ├── integrator.h  # Numerical integration
-│   ├── controller.h  # Control system
-│   └── mesh.h        # Basic mesh data structures
-├── src/              
-│   ├── cloth.cpp
-│   ├── integrator.cpp
-│   ├── controller.cpp
-│   └── mesh.cpp      
-├── optimization.cpp  # Main demo application
-├── simulation.cpp    # Simulation
-├── visual.cpp        # Basic visualization
-└── CMakeLists.txt    
+├── cpp/
+│   ├── include/cloth_opt/   # Public C++ headers
+│   ├── src/                 # C++ simulation core
+│   ├── apps/                # Visualization, simulation, and control executables
+│   └── bindings/            # pybind11 extension build
+├── src/cloth_opt/           # Python Engine, Env, Action, Policy, and rendering
+├── scripts/                 # Python rollout entry points
+├── configs/                 # Experiment configurations
+├── pyproject.toml
+└── CMakeLists.txt
 ```
 
 ## Usage Examples

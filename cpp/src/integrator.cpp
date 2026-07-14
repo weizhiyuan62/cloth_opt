@@ -1,4 +1,4 @@
-#include "integrator.h"
+#include "cloth_opt/integrator.h"
 #include <iostream>
 #include <iomanip>
 

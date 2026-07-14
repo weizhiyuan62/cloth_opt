@@ -1,4 +1,4 @@
-#include "mesh.h"
+#include "cloth_opt/mesh.h"
 #include <Eigen/Geometry>  // Add this for cross product
 #include <iostream>
 #include <cmath>

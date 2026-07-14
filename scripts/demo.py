@@ -1,4 +1,4 @@
-"""Single-rollout, position-control-only ClothOpt example.
+"""Single-rollout, position-control-only ClothOpt example script.
 
 This mirrors the useful core of FoldVLA's rollout workflow: create one run
 directory, save its resolved configuration and actions, execute a rollout,

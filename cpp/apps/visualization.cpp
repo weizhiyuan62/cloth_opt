@@ -4,7 +4,7 @@
 #include <vector>
 #include <iostream>
 
-// Function to create a cloth grid mesh
+// Standalone visualization app for a cloth grid mesh.
 std::pair<Eigen::MatrixXd, Eigen::MatrixXi> createClothGrid(int width, int height, double spacing = 1.0) {
     // Create vertices
     Eigen::MatrixXd vertices(width * height, 3);

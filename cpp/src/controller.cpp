@@ -1,5 +1,5 @@
-#include "controller.h"
-#include "cloth.h"
+#include "cloth_opt/controller.h"
+#include "cloth_opt/cloth.h"
 #include <iostream>
 #include <algorithm>
 #include <cmath>

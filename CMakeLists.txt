@@ -344,7 +344,7 @@ file(
     GLOB_RECURSE
     SHARED_SOURCES
     CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cpp/src/*.cpp"
 )
 
 # ============================================================
@@ -363,7 +363,7 @@ function(add_main_executable target_name source_file)
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/deps/libigl/include"
             "${CMAKE_CURRENT_SOURCE_DIR}/deps/fbx/include"
-            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+            "${CMAKE_CURRENT_SOURCE_DIR}/cpp/include"
             "${CMAKE_CURRENT_SOURCE_DIR}/deps/alembic/lib"
             "${CMAKE_CURRENT_SOURCE_DIR}/deps/eigen"
             "${CMAKE_CURRENT_SOURCE_DIR}/deps/json"
@@ -458,9 +458,9 @@ endfunction()
 # Main executables
 # ============================================================
 
-add_main_executable(Visualization "${CMAKE_CURRENT_SOURCE_DIR}/visual.cpp")
-add_main_executable(Simulation "${CMAKE_CURRENT_SOURCE_DIR}/simulation.cpp")
-add_main_executable(Optimization "${CMAKE_CURRENT_SOURCE_DIR}/optimization.cpp")
+add_main_executable(Visualization "${CMAKE_CURRENT_SOURCE_DIR}/cpp/apps/visualization.cpp")
+add_main_executable(Simulation "${CMAKE_CURRENT_SOURCE_DIR}/cpp/apps/simulation.cpp")
+add_main_executable(Optimization "${CMAKE_CURRENT_SOURCE_DIR}/cpp/apps/optimization.cpp")
 
 # ============================================================
 # Configuration summary

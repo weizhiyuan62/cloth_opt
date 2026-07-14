@@ -1,5 +1,5 @@
-#ifndef MESH_H
-#define MESH_H
+#ifndef CLOTH_OPT_MESH_H
+#define CLOTH_OPT_MESH_H
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>  // Add this for cross product
@@ -67,4 +67,4 @@ namespace MeshUtils {
 
 } // namespace ClothOpt
 
-#endif // MESH_H
+#endif // CLOTH_OPT_MESH_H

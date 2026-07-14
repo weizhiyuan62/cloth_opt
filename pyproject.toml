@@ -14,6 +14,6 @@ dependencies = ["numpy>=1.23"]
 video = ["matplotlib>=3.7"]
 
 [tool.scikit-build]
-cmake.source-dir = "python"
+cmake.source-dir = "cpp/bindings"
 wheel.packages = ["src/cloth_opt"]
 build-dir = "build/python/{wheel_tag}"

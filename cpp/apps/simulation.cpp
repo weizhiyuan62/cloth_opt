@@ -1,5 +1,5 @@
-#include "cloth.h"
-#include "integrator.h"
+#include "cloth_opt/cloth.h"
+#include "cloth_opt/integrator.h"
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
 #include <polyscope/point_cloud.h>

@@ -1,7 +1,7 @@
-#ifndef INTEGRATOR_H
-#define INTEGRATOR_H
+#ifndef CLOTH_OPT_INTEGRATOR_H
+#define CLOTH_OPT_INTEGRATOR_H
 
-#include "cloth.h"
+#include "cloth_opt/cloth.h"
 #include <Eigen/Core>
 #include <iostream>
 #include <fstream>
@@ -85,4 +85,4 @@ private:
 
 } // namespace ClothOpt
 
-#endif // INTEGRATOR_H
+#endif // CLOTH_OPT_INTEGRATOR_H

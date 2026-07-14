@@ -1,6 +1,6 @@
-#include "cloth.h"
-#include "controller.h"
-#include "integrator.h"
+#include "cloth_opt/cloth.h"
+#include "cloth_opt/controller.h"
+#include "cloth_opt/integrator.h"
 
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>

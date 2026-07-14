@@ -18,7 +18,7 @@ pybind11_add_module(_core MODULE
 
 target_include_directories(_core PRIVATE
     ../include
-    ../deps/eigen
+    ../../deps/eigen
 )
 
 # integrator.cpp currently uses the TBB API unconditionally in collision code.

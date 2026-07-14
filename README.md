@@ -2,6 +2,66 @@
 
 A demo for cloth simulation with intelligent control.
 
+## Python optimization interface
+
+The simulator can be used from Python while keeping the physics, controller,
+and integrator in C++. The Python stack follows the same separation used by
+FoldVLA:
+
+```text
+Python policy / optimizer
+        -> ClothEnv
+        -> ClothOptEngine
+        -> cloth_opt._core (pybind11)
+        -> existing C++ ClothMesh / ClothController / Integrator
+```
+
+The original `Visualization`, `Simulation`, and `Optimization` executables are
+unchanged and can still be built with the original CMake project.
+
+### Install
+
+Python 3.9+ and a C++17 compiler are required. The build dependencies and the
+C++ extension are handled by pip:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+After changing only Python policy or optimization code, rebuilding is not
+needed. Run `python -m pip install -e .` again after changing C++ headers,
+sources, or `python/bindings.cpp`.
+
+### Run the control demo
+
+```bash
+source .venv/bin/activate
+python scripts/sim_cloth.py
+```
+
+The demo executes position, velocity, force, trajectory, circular, sinusoidal,
+and wind controls. It writes the resolved environment configuration, actions,
+trajectory summary, and final OBJ mesh under `outputs/sim_cloth_demo/`.
+
+The main policy-facing loop is:
+
+```python
+observation = env.reset()
+while True:
+    result = policy.get_action(observation)
+    if result is None:
+        break
+    action, info = result
+    observation = env.step(action)
+```
+
+Use `configs/sim_cloth.json` to configure the grid, material properties,
+timestep, control substeps, and output directory. New optimization strategies
+should implement the small policy interface in `src/cloth_opt/policy/base.py`
+and return `ClothAction` objects.
+
 ## System Requirements (Tested)
 
 - **OS**: Ubuntu 24.04 LTS

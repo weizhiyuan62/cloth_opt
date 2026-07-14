@@ -26,7 +26,7 @@ def main(cfg: DictConfig) -> None:
     OmegaConf.save(cfg, run_dir / ".hydra" / "resolved.yaml", resolve=True)
 
     env_config = make_env_config(cfg)
-    task = SymmetricFoldTask(env_config, make_fold_task_config(cfg))
+    task = SymmetricFoldTask(env_config, make_fold_task_config(cfg.traj_cfg))
     parameters = make_fold_parameters(cfg)
     logger.info("running symmetric-fold baseline with %s", parameters)
     result = task.rollout(parameters, record=True)

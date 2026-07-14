@@ -24,20 +24,20 @@ def make_env_config(cfg: DictConfig) -> ClothEnvConfig:
     )
 
 
-def make_fold_task_config(cfg: DictConfig) -> SymmetricFoldTaskConfig:
-    objective = OmegaConf.to_container(cfg.task.objective, resolve=True)
+def make_fold_task_config(traj_cfg: DictConfig) -> SymmetricFoldTaskConfig:
+    objective = OmegaConf.to_container(traj_cfg.objective, resolve=True)
     assert isinstance(objective, dict)
     return SymmetricFoldTaskConfig(
-        controlled_edge=str(cfg.task.controlled_edge),
-        anchor_edge=str(cfg.task.anchor_edge),
-        initial_settle_frames=int(cfg.task.initial_settle_frames),
-        final_settle_frames=int(cfg.task.final_settle_frames),
+        controlled_edge=str(traj_cfg.task.controlled_edge),
+        anchor_edge=str(traj_cfg.task.anchor_edge),
+        initial_settle_frames=int(traj_cfg.task.initial_settle_frames),
+        final_settle_frames=int(traj_cfg.task.final_settle_frames),
         **objective,
     )
 
 
 def make_fold_parameters(cfg: DictConfig) -> SymmetricFoldParameters:
-    values = OmegaConf.to_container(cfg.task.parameters, resolve=True)
+    values = OmegaConf.to_container(cfg.traj_cfg.rules, resolve=True)
     assert isinstance(values, dict)
     return SymmetricFoldParameters.from_mapping(values)
 

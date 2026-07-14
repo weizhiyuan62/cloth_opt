@@ -1,6 +1,5 @@
 defaults:
   - env: default
-  - task: symmetric_fold
   - render: enabled
   - _self_
 
@@ -11,6 +10,36 @@ seed: 0
 env:
   reset_height: 0.02
   n_substeps: 10
+
+traj_cfg:
+  task_name: "symmetric_fold"
+  task:
+    controlled_edge: "top"
+    anchor_edge: "bottom"
+    initial_settle_frames: 50
+    final_settle_frames: 140
+
+  rules:
+    lift_height: 0.20
+    arc_height: 0.20
+    landing_offset: 0.00
+    place_clearance: 0.04
+    layer_gap: 0.01
+    lift_frames: 40
+    transfer_frames: 100
+    place_frames: 40
+    position_gain: 800.0
+    max_force: 100.0
+
+  objective:
+    alignment_weight: 10.0
+    stretch_weight: 1.0
+    terminal_velocity_weight: 0.5
+    smoothness_weight: 0.05
+    success_alignment: 0.08
+    success_max_speed: 0.10
+
+
 
 hydra:
   run:

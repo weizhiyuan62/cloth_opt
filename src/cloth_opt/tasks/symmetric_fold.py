@@ -309,18 +309,7 @@ class SymmetricFoldTask:
                 if frame_callback is not None:
                     frame_callback(frame_index, phase, observation, controlled, targets)
                 frame_index += 1
-            
-            # machine done means the cloth has been folded, but we still need to evaluate the final state
-            for _ in range(100): # 100 * 0.002 * 10 = 2s,  which means will wait for 2s to let the cloth settle down
-                observation = env.step(None)
-                if record:
-                    positions_all.append(observation["positions"].copy())
-                    velocities_all.append(observation["velocities"].copy())
-                    times.append(observation["time"])
-                    actions.append(None)
-                if frame_callback is not None:
-                    frame_callback(frame_index, FoldPhase.FINAL_SETTLE, observation, controlled, targets_all[-1])
-                frame_index += 1    
+
             final_positions = observation["positions"].copy()
             final_velocities = observation["velocities"].copy()
             triangles = env.engine.mesh.triangles.copy()

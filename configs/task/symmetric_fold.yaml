@@ -1,7 +1,10 @@
 controlled_edge: bottom
 anchor_edge: top
 initial_settle_frames: 20
-final_settle_frames: 40
+# At dt=0.002 and n_substeps=10, 140 control frames provide 2.8 seconds
+# of post-release settling. Keeping this inside the state machine ensures that
+# positions, targets, phases, and rendered video frames remain aligned.
+final_settle_frames: 140
 
 parameters:
   lift_height: 0.20

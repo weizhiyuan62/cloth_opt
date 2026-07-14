@@ -1,0 +1,12 @@
+controlled_edge: bottom
+position_gain: 800.0
+max_force: 100.0
+frames_per_segment: 30
+
+# Shared XYZ offsets applied to every controlled edge vertex.
+offset_waypoints:
+  - [0.00, 0.00, 0.00]
+  - [0.00, 0.20, 0.15]
+  - [0.20, 0.25, 0.15]
+  - [-0.15, 0.18, -0.10]
+  - [0.00, 0.00, 0.00]

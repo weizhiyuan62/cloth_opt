@@ -1,33 +1,27 @@
-"""Single-rollout, position-control-only ClothOpt example script.
+"""Hydra-managed, position-control-only ClothOpt rollout."""
 
-This mirrors the useful core of FoldVLA's rollout workflow: create one run
-directory, save its resolved configuration and actions, execute a rollout,
-store numerical trajectories, render a fixed camera, and encode an MP4.
-"""
-
-import argparse
-import datetime as dt
 import json
+import logging
 from pathlib import Path
 import shutil
+from typing import Any
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig, OmegaConf
 
 from cloth_opt import ClothAction, ClothEnv, ClothEnvConfig, SceneConfig
 from cloth_opt.render import SingleCameraRenderer, frames_to_video
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=Path, default=Path("configs/position_demo.json"))
-    parser.add_argument("--output-dir", type=Path, default=None)
-    parser.add_argument("--no-video", action="store_true", help="skip frame rendering and MP4 encoding")
-    parser.add_argument("--keep-frames", action="store_true", help="keep PNG files after encoding")
-    return parser.parse_args()
+logger = logging.getLogger(__name__)
 
 
 def interpolate_waypoints(waypoints: np.ndarray, frames_per_segment: int) -> np.ndarray:
-    """Piecewise-linear targets, excluding duplicate segment endpoints."""
+    if frames_per_segment <= 0:
+        raise ValueError("trajectory.frames_per_segment must be positive")
+    if waypoints.ndim != 2 or waypoints.shape[1] != 3 or len(waypoints) < 2:
+        raise ValueError("trajectory.offset_waypoints must have shape (N, 3), N >= 2")
 
     segments = []
     for start, end in zip(waypoints[:-1], waypoints[1:]):
@@ -37,60 +31,70 @@ def interpolate_waypoints(waypoints: np.ndarray, frames_per_segment: int) -> np.
     return np.concatenate(segments, axis=0)
 
 
-def main() -> None:
-    args = parse_args()
-    raw_config = json.loads(args.config.read_text(encoding="utf-8"))
-    scene = SceneConfig(**raw_config["scene"])
-    env_config = ClothEnvConfig(
-        scene=scene,
-        n_substeps=int(raw_config["n_substeps"]),
-        reset_height=float(raw_config["reset_height"]),
-        pin_corners=bool(raw_config["pin_corners"]),
-    )
-    output_dir = args.output_dir or Path("outputs") / dt.datetime.now().strftime("position_demo_%Y%m%d_%H%M%S")
-    if output_dir.exists():
-        raise FileExistsError(f"output directory already exists: {output_dir}")
-    frame_dir = output_dir / "frames"
-    output_dir.mkdir(parents=True)
-    (output_dir / "config.json").write_text(json.dumps(raw_config, indent=2), encoding="utf-8")
+def get_controlled_indices(env: ClothEnv, edge: str) -> np.ndarray:
+    scene = env.config.scene
+    if edge == "top":
+        coordinates = [(0, column) for column in range(scene.width)]
+    elif edge == "bottom":
+        coordinates = [(scene.height - 1, column) for column in range(scene.width)]
+    elif edge == "left":
+        coordinates = [(row, 0) for row in range(scene.height)]
+    elif edge == "right":
+        coordinates = [(row, scene.width - 1) for row in range(scene.height)]
+    else:
+        raise ValueError(f"unsupported controlled edge: {edge}")
+    return np.asarray([env.engine.grid_index(row, column) for row, column in coordinates], dtype=np.int64)
 
-    env = ClothEnv(env_config)
+
+def make_env_config(cfg: DictConfig) -> ClothEnvConfig:
+    scene_values = OmegaConf.to_container(cfg.env.scene, resolve=True)
+    assert isinstance(scene_values, dict)
+    return ClothEnvConfig(
+        scene=SceneConfig(**scene_values),
+        n_substeps=int(cfg.env.n_substeps),
+        reset_height=float(cfg.env.reset_height),
+        pin_corners=bool(cfg.env.pin_corners),
+    )
+
+
+def make_renderer(cfg: DictConfig, env: ClothEnv) -> SingleCameraRenderer | None:
+    if not cfg.render.enabled:
+        return None
+    if cfg.render.backend != "matplotlib":
+        raise ValueError(f"unsupported render backend: {cfg.render.backend}")
+
+    scene = env.config.scene
+    extent = max((scene.width - 1) * scene.spacing, (scene.height - 1) * scene.spacing)
+    return SingleCameraRenderer(
+        env.engine.mesh.triangles,
+        bounds=((-0.4, extent + 0.4), (-0.4, extent + 0.4), (0.0, 1.2)),
+        elevation=float(cfg.render.camera.elevation),
+        azimuth=float(cfg.render.camera.azimuth),
+    )
+
+
+@hydra.main(config_path="../configs", config_name="demo", version_base="1.3")
+def main(cfg: DictConfig) -> None:
+    np.random.seed(int(cfg.seed))
+    run_dir = Path.cwd()
+    logger.info("run directory: %s", run_dir)
+    logger.info("seed: %d", cfg.seed)
+    OmegaConf.save(cfg, run_dir / ".hydra" / "resolved.yaml", resolve=True)
+
+    env = ClothEnv(make_env_config(cfg))
     observation = env.reset()
-
-    # Control the complete bottom edge. Each vertex keeps its relative X/Z
-    # position while the shared offset follows the trajectory below.
-    controlled_indices = np.array(
-        [env.engine.grid_index(scene.height - 1, column) for column in range(scene.width)],
-        dtype=np.int64,
-    )
+    controlled_indices = get_controlled_indices(env, str(cfg.trajectory.controlled_edge))
     initial_targets = observation["positions"][controlled_indices].copy()
-    offset_waypoints = np.array(
-        [
-            [0.00, 0.00, 0.00],
-            [0.00, 0.20, 0.15],
-            [0.20, 0.25, 0.15],
-            [-0.15, 0.18, -0.10],
-            [0.00, 0.00, 0.00],
-        ],
-        dtype=np.float64,
-    )
-    offsets = interpolate_waypoints(offset_waypoints, int(raw_config["frames_per_segment"]))
+    waypoints = np.asarray(cfg.trajectory.offset_waypoints, dtype=np.float64)
+    offsets = interpolate_waypoints(waypoints, int(cfg.trajectory.frames_per_segment))
 
-    renderer = None
-    if not args.no_video:
-        extent = max((scene.width - 1) * scene.spacing, (scene.height - 1) * scene.spacing)
-        renderer = SingleCameraRenderer(
-            env.engine.mesh.triangles,
-            bounds=((-0.4, extent + 0.4), (-0.4, extent + 0.4), (0.0, 1.2)),
-            elevation=float(raw_config["camera"]["elevation"]),
-            azimuth=float(raw_config["camera"]["azimuth"]),
-        )
-
+    frame_dir = run_dir / "frames"
+    renderer = make_renderer(cfg, env)
     positions_all = [observation["positions"].copy()]
     velocities_all = [observation["velocities"].copy()]
     targets_all = []
     times = [observation["time"]]
-    action_records = []
+    action_records: list[dict[str, Any]] = []
 
     try:
         for frame_index, offset in enumerate(offsets):
@@ -100,8 +104,8 @@ def main() -> None:
                 vertex_indices=controlled_indices,
                 values=targets,
                 params={
-                    "gain": float(raw_config["position_gain"]),
-                    "max_force": float(raw_config["max_force"]),
+                    "gain": float(cfg.trajectory.position_gain),
+                    "max_force": float(cfg.trajectory.max_force),
                 },
             )
             observation = env.step(action)
@@ -119,29 +123,47 @@ def main() -> None:
                     frame_dir / f"frame_{frame_index:05d}.png",
                     title=f"Position control  t={observation['time']:.3f}s",
                 )
-        env.export_mesh(output_dir / "final.obj")
+            if frame_index % 20 == 0 or frame_index == len(offsets) - 1:
+                logger.info("rollout frame %d/%d", frame_index + 1, len(offsets))
+
+        if cfg.save.final_mesh:
+            env.export_mesh(run_dir / "final.obj")
     finally:
         if renderer is not None:
             renderer.close()
         env.close()
 
-    np.savez_compressed(
-        output_dir / "trajectory.npz",
-        time=np.asarray(times),
-        positions=np.asarray(positions_all),
-        velocities=np.asarray(velocities_all),
-        target_positions=np.asarray(targets_all),
-        controlled_indices=controlled_indices,
-    )
-    (output_dir / "actions.json").write_text(json.dumps(action_records, indent=2), encoding="utf-8")
+    positions_array = np.asarray(positions_all)
+    velocities_array = np.asarray(velocities_all)
+    targets_array = np.asarray(targets_all)
+    if cfg.save.trajectory:
+        np.savez_compressed(
+            run_dir / "trajectory.npz",
+            time=np.asarray(times),
+            positions=positions_array,
+            velocities=velocities_array,
+            target_positions=targets_array,
+            controlled_indices=controlled_indices,
+        )
+    if cfg.save.actions:
+        (run_dir / "actions.json").write_text(json.dumps(action_records, indent=2), encoding="utf-8")
+
+    metrics = {
+        "rollout_frames": len(offsets),
+        "simulation_time": float(times[-1]),
+        "final_center": positions_array[-1].mean(axis=0).tolist(),
+        "final_max_speed": float(np.linalg.norm(velocities_array[-1], axis=1).max()),
+    }
+    (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+
     if renderer is not None:
-        frames_to_video(frame_dir, output_dir / "trajectory.mp4", int(raw_config["video_fps"]))
-        if not args.keep_frames:
+        frames_to_video(frame_dir, run_dir / "trajectory.mp4", int(cfg.render.fps))
+        if not cfg.render.keep_frames:
             shutil.rmtree(frame_dir)
 
-    print(f"rollout frames: {len(offsets)}")
-    print(f"controlled vertices: {controlled_indices.tolist()}")
-    print(f"saved to: {output_dir}")
+    logger.info("controlled vertices: %s", controlled_indices.tolist())
+    logger.info("metrics: %s", metrics)
+    logger.info("rollout complete: %s", run_dir)
 
 
 if __name__ == "__main__":

@@ -41,49 +41,59 @@ conda activate clothopt
 python -m pip install -e . --no-build-isolation
 ```
 
-### Run the control demo
+### Hydra-managed position rollout
 
-```bash
-conda activate clothopt
-python scripts/sim_cloth.py
-```
-
-The demo executes position, velocity, force, trajectory, circular, sinusoidal,
-and wind controls. It writes the resolved environment configuration, actions,
-trajectory summary, and final OBJ mesh under `outputs/sim_cloth_demo/`.
-
-The main policy-facing loop is:
-
-```python
-observation = env.reset()
-while True:
-    result = policy.get_action(observation)
-    if result is None:
-        break
-    action, info = result
-    observation = env.step(action)
-```
-
-Use `configs/sim_cloth.json` to configure the grid, material properties,
-timestep, control substeps, and output directory. New optimization strategies
-should implement the small policy interface in `src/cloth_opt/policy/base.py`
-and return `ClothAction` objects.
-
-### Position-control trajectory and video
-
-`scripts/demo.py` is the position-control-only rollout intended as the starting point
-for optimization:
+`scripts/demo.py` is the position-control-only rollout entry point. Like
+FoldVLA, Hydra composes the environment, trajectory strategy, and rendering
+configuration, changes into a unique run directory, and stores the exact
+configuration under `.hydra/`:
 
 ```bash
 conda activate clothopt
 python scripts/demo.py
 ```
 
-It moves the bottom cloth edge through piecewise-linear position waypoints and
-saves `trajectory.npz`, `actions.json`, `final.obj`, and one fixed-camera
-`trajectory.mp4` in a timestamped directory under `outputs/`. Use `--no-video`
-for numerical-only rollouts or `--keep-frames` to preserve the PNG frames.
-Trajectory and camera settings are in `configs/position_demo.json`.
+Rendering is disabled by default. Enable the fixed debug camera only when
+needed:
+
+```bash
+python scripts/demo.py render=debug
+```
+
+Override any setting without editing a configuration file:
+
+```bash
+python scripts/demo.py \
+  trajectory.position_gain=1200 \
+  trajectory.frames_per_segment=50 \
+  env.scene.stiffness=1000
+```
+
+Run a Hydra parameter sweep:
+
+```bash
+python scripts/demo.py -m \
+  trajectory.position_gain=400,800,1200 \
+  env.scene.stiffness=600,1000 \
+  render=disabled
+```
+
+Single runs are written to `outputs/YYYY-MM-DD/HH-MM-SS/`; multiruns go to
+`outputs/multirun/`. Each run contains `.hydra/`, `demo.log`, `metrics.json`,
+`trajectory.npz`, `actions.json`, and `final.obj`. With `render=debug`, it also
+contains `trajectory.mp4`.
+
+Hydra configuration groups:
+
+```text
+configs/
+├── demo.yaml
+├── env/default.yaml
+├── trajectory/edge_position.yaml
+└── render/
+    ├── disabled.yaml
+    └── debug.yaml
+```
 
 ## System Requirements (Tested)
 

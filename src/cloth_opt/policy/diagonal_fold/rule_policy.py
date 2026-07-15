@@ -408,6 +408,38 @@ class DiagonalFoldPolicy:
             np.asarray(pinned, dtype=np.int64),
         )
 
+    def _controlled_boundary_indices(
+        self, env: ClothEnv, moving: np.ndarray
+    ) -> np.ndarray:
+        """Return the two outer cloth edges which bound the moving triangle."""
+
+        corner_row, corner_column = self._corner_coordinate(
+            env, self.policy_config.controlled_corner
+        )
+        coordinates = [
+            (corner_row, column)
+            for column in range(env.config.scene.width)
+        ] + [
+            (row, corner_column)
+            for row in range(env.config.scene.height)
+            if row != corner_row
+        ]
+        moving_set = set(int(index) for index in moving)
+        controlled: list[int] = []
+        seen: set[int] = set()
+        for row, column in coordinates:
+            index = env.engine.grid_index(row, column)
+            # Diagonal endpoints lie on the pinned crease, not the moving side.
+            if index in moving_set and index not in seen:
+                controlled.append(index)
+                seen.add(index)
+        if not controlled:
+            raise RuntimeError("no controllable boundary vertices found")
+        expected_corner = env.engine.grid_index(corner_row, corner_column)
+        if expected_corner not in seen:
+            raise RuntimeError("controlled corner is not in the moving boundary")
+        return np.asarray(controlled, dtype=np.int64)
+
     def rollout(
         self,
         parameters: DiagonalFoldParameters,
@@ -425,13 +457,7 @@ class DiagonalFoldPolicy:
             env, initial_positions
         )
         moving, stationary, crease, pinned = self._fold_correspondence(env)
-        corner_coordinate = self._corner_coordinate(
-            env, self.policy_config.controlled_corner
-        )
-        corner_index = env.engine.grid_index(*corner_coordinate)
-        if corner_index not in moving:
-            raise RuntimeError("controlled corner is not in the moving triangle")
-        controlled = np.asarray([corner_index], dtype=np.int64)
+        controlled = self._controlled_boundary_indices(env, moving)
 
         pin_flags = env.engine.get_cloth_pin_flags()
         pin_flags[pinned] = True
@@ -532,6 +558,13 @@ class DiagonalFoldPolicy:
         )
 
         scene = env.config.scene
+        extent = max(
+            (scene.width - 1) * scene.spacing,
+            (scene.height - 1) * scene.spacing,
+        )
+        length_scale = max(extent, 1e-8)
+        normalized_stationary_drift = stationary_drift / length_scale
+        normalized_crease_error = crease_error / length_scale
         metrics = evaluate_fold_trajectory(
             trajectory_positions,
             velocities,
@@ -547,27 +580,29 @@ class DiagonalFoldPolicy:
         )
         c = self.policy_config
         loss = (
-            c.alignment_weight * float(metrics["alignment_error"])
-            + c.energy_weight * float(metrics["control_effort_proxy"])
-            + c.stationary_weight * stationary_drift
-            + c.crease_weight * crease_error
+            c.alignment_weight * float(metrics["normalized_alignment_error"])
+            + c.energy_weight * float(metrics["normalized_control_effort_proxy"])
+            + c.stationary_weight * normalized_stationary_drift
+            + c.crease_weight * normalized_crease_error
             + c.stretch_weight * float(metrics["trajectory_mean_stretch"])
             + c.max_stretch_weight * float(metrics["trajectory_max_stretch"])
-            + c.penetration_weight * float(metrics["layer_penetration_proxy"])
-            + c.terminal_velocity_weight * float(metrics["terminal_mean_speed"])
-            + c.smoothness_weight * float(metrics["target_smoothness"])
+            + c.penetration_weight * float(metrics["normalized_layer_penetration_proxy"])
+            + c.terminal_velocity_weight * float(metrics["normalized_terminal_mean_speed"])
+            + c.smoothness_weight * float(metrics["normalized_target_smoothness"])
         )
         structural_integrity = float(metrics["trajectory_max_stretch"]) <= c.success_max_stretch
         success = (
-            float(metrics["alignment_error"]) <= c.success_alignment
-            and float(metrics["terminal_max_speed"]) <= c.success_max_speed
+            float(metrics["normalized_alignment_error"]) <= c.success_alignment
+            and float(metrics["normalized_terminal_max_speed"]) <= c.success_max_speed
             and float(metrics["aesthetic_quality"]) >= c.success_aesthetic_quality
             and structural_integrity
         )
         metrics.update({
             "loss": float(loss),
             "stationary_drift": stationary_drift,
+            "normalized_stationary_drift": float(normalized_stationary_drift),
             "crease_error": crease_error,
+            "normalized_crease_error": float(normalized_crease_error),
             "structural_integrity": bool(structural_integrity),
             "success": bool(success),
         })

@@ -45,9 +45,14 @@ def render_fold_result(
     frame_dir = output_dir / "frames"
     scene = env_config.scene
     extent = max((scene.width - 1) * scene.spacing, (scene.height - 1) * scene.spacing)
+    horizontal_padding = 0.1 * extent
     renderer = make_single_camera_renderer(
         result.triangles,
-        bounds=((-0.4, extent + 0.4), (-0.4, extent + 0.4), (0.0, 1.2)),
+        bounds=(
+            (-horizontal_padding, extent + horizontal_padding),
+            (-horizontal_padding, extent + horizontal_padding),
+            (0.0, 1.2),
+        ),
         render_cfg=render_cfg,
     )
     initial_controlled = result.positions[0, result.controlled_indices]

@@ -63,6 +63,13 @@ def evaluate_fold_trajectory(
     max_speed = float(speeds.max())
 
     extent = max((width - 1) * spacing, (height - 1) * spacing)
+    length_scale = max(extent, 1e-8)
+    normalized_alignment = alignment / length_scale
+    normalized_control_effort = control_effort / (length_scale * length_scale)
+    normalized_smoothness = smoothness / (length_scale * length_scale)
+    normalized_penetration = penetration / length_scale
+    normalized_mean_speed = mean_speed / length_scale
+    normalized_max_speed = max_speed / length_scale
     alignment_score = float(np.exp(-alignment / max(0.08 * extent, 1e-8)))
     distortion_score = float(np.exp(-max_stretch / 0.25))
     smoothness_score = float(
@@ -80,13 +87,19 @@ def evaluate_fold_trajectory(
 
     return {
         "alignment_error": alignment,
+        "normalized_alignment_error": float(normalized_alignment),
         "control_effort_proxy": control_effort,
+        "normalized_control_effort_proxy": float(normalized_control_effort),
         "trajectory_mean_stretch": mean_stretch,
         "trajectory_max_stretch": max_stretch,
         "target_smoothness": smoothness,
+        "normalized_target_smoothness": float(normalized_smoothness),
         "layer_penetration_proxy": penetration,
+        "normalized_layer_penetration_proxy": float(normalized_penetration),
         "terminal_mean_speed": mean_speed,
         "terminal_max_speed": max_speed,
+        "normalized_terminal_mean_speed": float(normalized_mean_speed),
+        "normalized_terminal_max_speed": float(normalized_max_speed),
         "aesthetic_quality": float(aesthetic_quality),
         "alignment_score": alignment_score,
         "distortion_score": distortion_score,

@@ -434,18 +434,18 @@ class SymmetricFoldPolicy:
         )
         c = self.policy_config
         loss = (
-            c.alignment_weight * float(metrics["alignment_error"])
-            + c.energy_weight * float(metrics["control_effort_proxy"])
+            c.alignment_weight * float(metrics["normalized_alignment_error"])
+            + c.energy_weight * float(metrics["normalized_control_effort_proxy"])
             + c.stretch_weight * float(metrics["trajectory_mean_stretch"])
             + c.max_stretch_weight * float(metrics["trajectory_max_stretch"])
-            + c.penetration_weight * float(metrics["layer_penetration_proxy"])
-            + c.terminal_velocity_weight * float(metrics["terminal_mean_speed"])
-            + c.smoothness_weight * float(metrics["target_smoothness"])
+            + c.penetration_weight * float(metrics["normalized_layer_penetration_proxy"])
+            + c.terminal_velocity_weight * float(metrics["normalized_terminal_mean_speed"])
+            + c.smoothness_weight * float(metrics["normalized_target_smoothness"])
         )
         structural_integrity = float(metrics["trajectory_max_stretch"]) <= c.success_max_stretch
         success = (
-            float(metrics["alignment_error"]) <= c.success_alignment
-            and float(metrics["terminal_max_speed"]) <= c.success_max_speed
+            float(metrics["normalized_alignment_error"]) <= c.success_alignment
+            and float(metrics["normalized_terminal_max_speed"]) <= c.success_max_speed
             and float(metrics["aesthetic_quality"]) >= c.success_aesthetic_quality
             and structural_integrity
         )

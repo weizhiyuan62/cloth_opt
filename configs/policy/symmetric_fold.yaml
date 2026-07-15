@@ -2,7 +2,7 @@ name: symmetric_fold
 
 setup:
   controlled_edge: top
-  # Only the outer row is position-controlled. Offset 0 pins center row 5.
+  # Only the outer edge is controlled. Offset 0 pins the resolution-derived center row.
   pinned_line_offsets: [0]
   pin_final_state: false
   initial_settle_frames: 30
@@ -28,6 +28,7 @@ objective:
   penetration_weight: 10.0
   terminal_velocity_weight: 0.5
   smoothness_weight: 0.05
+  # Fractions of cloth extent (speed is measured in extents per second).
   success_alignment: 0.08
   success_max_speed: 0.10
   success_aesthetic_quality: 70.0

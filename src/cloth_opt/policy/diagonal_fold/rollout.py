@@ -1,7 +1,6 @@
 from pathlib import Path
 import shutil
 
-import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from cloth_opt.sim import ClothEnvConfig, frames_to_video, make_single_camera_renderer
@@ -45,24 +44,24 @@ def render_diagonal_result(
     frame_dir = output_dir / "frames"
     scene = env_config.scene
     extent = max((scene.width - 1) * scene.spacing, (scene.height - 1) * scene.spacing)
+    horizontal_padding = 0.1 * extent
     renderer = make_single_camera_renderer(
         result.triangles,
-        bounds=((-0.4, extent + 0.4), (-0.4, extent + 0.4), (0.0, 1.2)),
+        bounds=(
+            (-horizontal_padding, extent + horizontal_padding),
+            (-horizontal_padding, extent + horizontal_padding),
+            (0.0, 1.2),
+        ),
         render_cfg=render_cfg,
     )
-    initial_controlled = result.positions[0, result.controlled_indices]
-    center_xz = result.positions[0][:, [0, 2]].mean(axis=0)
-    corner_offset = initial_controlled[:, [0, 2]] - center_xz
-    display_local_index = int(np.linalg.norm(corner_offset, axis=1).argmax())
-    display_indices = result.controlled_indices[[display_local_index]]
     try:
         for frame_index, (positions, target, phase) in enumerate(
             zip(result.positions[1:], result.target_positions, result.phases)
         ):
             renderer.save_frame(
                 positions,
-                display_indices,
-                target[[display_local_index]],
+                result.controlled_indices,
+                target,
                 frame_dir / f"frame_{frame_index:05d}.png",
                 title=f"Diagonal fold: {phase}",
             )

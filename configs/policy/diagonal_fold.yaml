@@ -3,9 +3,9 @@ name: diagonal_fold
 setup:
   # main: top-left to bottom-right; anti: top-right to bottom-left.
   fold_diagonal: main
-  # This single corner vertex is the only position-controlled grasp point.
+  # The corner selects the two outer boundary edges on the moving side.
   controlled_corner: top_right
-  # Offset 0 pins only the 10-vertex diagonal crease.
+  # Offset 0 pins only the full diagonal crease, independent of resolution.
   pinned_line_offsets: [0]
   pin_final_state: false
   initial_settle_frames: 30
@@ -34,6 +34,7 @@ objective:
   penetration_weight: 10.0
   terminal_velocity_weight: 0.5
   smoothness_weight: 0.05
+  # Fractions of cloth extent (speed is measured in extents per second).
   success_alignment: 0.10
   success_max_speed: 0.10
   success_aesthetic_quality: 70.0

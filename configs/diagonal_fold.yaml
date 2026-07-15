@@ -7,8 +7,12 @@ defaults:
 seed: 0
 
 env:
-  reset_height: 0.02
+  reset_height: 0.0
   n_substeps: 10
+  scene:
+    width: 10
+    height: 10
+    spacing: 0.1
 
 hydra:
   run:

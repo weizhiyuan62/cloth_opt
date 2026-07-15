@@ -7,6 +7,7 @@ from typing import Any, Callable, Mapping
 import numpy as np
 
 from cloth_opt.sim import ClothAction, ClothEnv, ClothEnvConfig
+from cloth_opt.policy.fold_metrics import evaluate_fold_trajectory
 
 
 class FoldPhase(str, Enum):
@@ -14,6 +15,7 @@ class FoldPhase(str, Enum):
     LIFT = "lift"
     TRANSFER = "transfer"
     PLACE = "place"
+    HOLD = "hold"
     RELEASE = "release"
     FINAL_SETTLE = "final_settle"
     DONE = "done"
@@ -21,47 +23,55 @@ class FoldPhase(str, Enum):
 
 @dataclass(frozen=True)
 class SymmetricFoldParameters:
-    lift_height: float = 0.20
-    arc_height: float = 0.20
-    landing_offset: float = 0.0
-    place_clearance: float = 0.04
+    lift_angle: float = 45.0
+    transfer_angle: float = 165.0
+    final_angle: float = 180.0
     layer_gap: float = 0.01
-    lift_frames: int = 20
-    transfer_frames: int = 50
-    place_frames: int = 20
-    position_gain: float = 800.0
-    max_force: float = 100.0
+    lift_frames: int = 50
+    transfer_frames: int = 120
+    place_frames: int = 50
+    hold_frames: int = 60
+    position_gain: float = 2000.0
+    max_force: float = 500.0
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, Any]) -> "SymmetricFoldParameters":
         converted = dict(values)
-        for key in ("lift_frames", "transfer_frames", "place_frames"):
+        for key in ("lift_frames", "transfer_frames", "place_frames", "hold_frames"):
             converted[key] = max(1, int(round(float(converted[key]))))
         for key in (
-            "lift_height",
-            "arc_height",
-            "landing_offset",
-            "place_clearance",
+            "lift_angle",
+            "transfer_angle",
+            "final_angle",
             "layer_gap",
             "position_gain",
             "max_force",
         ):
             converted[key] = float(converted[key])
-        return cls(**converted)
+        parameters = cls(**converted)
+        if not 0.0 < parameters.lift_angle < parameters.transfer_angle < parameters.final_angle <= 180.0:
+            raise ValueError("angles must satisfy 0 < lift < transfer < final <= 180")
+        return parameters
 
 
 @dataclass(frozen=True)
 class SymmetricFoldPolicyConfig:
     controlled_edge: str = "bottom"
-    anchor_edge: str = "top"
+    pinned_line_offsets: tuple[int, ...] = (0, 2, 4)
+    pin_final_state: bool = True
     initial_settle_frames: int = 20
     final_settle_frames: int = 40
     alignment_weight: float = 10.0
+    energy_weight: float = 0.05
     stretch_weight: float = 1.0
+    max_stretch_weight: float = 2.0
+    penetration_weight: float = 10.0
     terminal_velocity_weight: float = 0.5
     smoothness_weight: float = 0.05
     success_alignment: float = 0.08
     success_max_speed: float = 0.10
+    success_aesthetic_quality: float = 70.0
+    success_max_stretch: float = 0.35
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, Any]) -> "SymmetricFoldPolicyConfig":
@@ -124,31 +134,58 @@ def _smoothstep(value: float) -> float:
     return value * value * (3.0 - 2.0 * value)
 
 
+def _rotate_about_axis(
+    points: np.ndarray,
+    axis_origin: np.ndarray,
+    axis_direction: np.ndarray,
+    angle_radians: float,
+) -> np.ndarray:
+    relative = np.asarray(points, dtype=np.float64) - axis_origin
+    axis = np.asarray(axis_direction, dtype=np.float64)
+    axis = axis / np.linalg.norm(axis)
+    cosine, sine = np.cos(angle_radians), np.sin(angle_radians)
+    return (
+        axis_origin
+        + relative * cosine
+        + np.cross(axis, relative) * sine
+        + np.outer(relative @ axis, axis) * (1.0 - cosine)
+    )
+
+
 class SymmetricFoldStateMachine:
     def __init__(
         self,
         start_targets: np.ndarray,
-        destination_targets: np.ndarray,
         controlled_indices: np.ndarray,
+        axis_origin: np.ndarray,
+        axis_direction: np.ndarray,
+        rotation_sign: float,
         parameters: SymmetricFoldParameters,
         policy_config: SymmetricFoldPolicyConfig,
     ) -> None:
         self.start_targets = start_targets.copy()
-        self.destination_targets = destination_targets.copy()
         self.controlled_indices = controlled_indices.copy()
+        self.axis_origin = axis_origin.copy()
+        self.axis_direction = axis_direction.copy()
+        self.rotation_sign = float(rotation_sign)
         self.parameters = parameters
         self.policy_config = policy_config
         self.phase = FoldPhase.INITIAL_SETTLE
         self.phase_frame = 0
 
-        p = parameters
-        self.lift_targets = self.start_targets + np.array([0.0, p.lift_height, 0.0])
-        self.transfer_end = self.destination_targets.copy()
-        self.transfer_end[:, 1] += p.place_clearance
-        self.transfer_end[:, 2] += p.landing_offset
-        self.place_targets = self.destination_targets.copy()
-        self.place_targets[:, 1] += p.layer_gap
-        self.place_targets[:, 2] += p.landing_offset
+        self.place_targets = self._angle_target(parameters.final_angle)
+        self.place_targets[:, 1] += parameters.layer_gap
+
+    def _angle_target(self, angle_degrees: float) -> np.ndarray:
+        return _rotate_about_axis(
+            self.start_targets,
+            self.axis_origin,
+            self.axis_direction,
+            self.rotation_sign * np.deg2rad(angle_degrees),
+        )
+
+    def _interpolated_target(self, start: float, end: float, progress: float) -> np.ndarray:
+        return self._angle_target(start + progress * (end - start))
 
     @property
     def done(self) -> bool:
@@ -161,6 +198,7 @@ class SymmetricFoldStateMachine:
             FoldPhase.LIFT: p.lift_frames,
             FoldPhase.TRANSFER: p.transfer_frames,
             FoldPhase.PLACE: p.place_frames,
+            FoldPhase.HOLD: p.hold_frames,
             FoldPhase.RELEASE: 1,
             FoldPhase.FINAL_SETTLE: c.final_settle_frames,
         }[self.phase]
@@ -171,6 +209,7 @@ class SymmetricFoldStateMachine:
             FoldPhase.LIFT,
             FoldPhase.TRANSFER,
             FoldPhase.PLACE,
+            FoldPhase.HOLD,
             FoldPhase.RELEASE,
             FoldPhase.FINAL_SETTLE,
             FoldPhase.DONE,
@@ -191,14 +230,17 @@ class SymmetricFoldStateMachine:
             action = None
             targets = self.start_targets
         elif phase == FoldPhase.LIFT:
-            targets = self.start_targets * (1.0 - progress) + self.lift_targets * progress
+            targets = self._interpolated_target(0.0, p.lift_angle, progress)
             action = self._position_action(targets)
         elif phase == FoldPhase.TRANSFER:
-            targets = self.lift_targets * (1.0 - progress) + self.transfer_end * progress
-            targets[:, 1] += np.sin(np.pi * progress) * p.arc_height
+            targets = self._interpolated_target(p.lift_angle, p.transfer_angle, progress)
             action = self._position_action(targets)
         elif phase == FoldPhase.PLACE:
-            targets = self.transfer_end * (1.0 - progress) + self.place_targets * progress
+            targets = self._interpolated_target(p.transfer_angle, p.final_angle, progress)
+            targets[:, 1] += progress * p.layer_gap
+            action = self._position_action(targets)
+        elif phase == FoldPhase.HOLD:
+            targets = self.place_targets
             action = self._position_action(targets)
         elif phase == FoldPhase.RELEASE:
             targets = self.place_targets
@@ -235,24 +277,12 @@ class SymmetricFoldPolicy:
         self.env_config = env_config
         self.policy_config = policy_config
 
-    def _edge_indices(self, env: ClothEnv, edge: str) -> np.ndarray:
-        scene = env.config.scene
-        if edge == "top":
-            coordinates = [(0, column) for column in range(scene.width)]
-        elif edge == "bottom":
-            coordinates = [(scene.height - 1, column) for column in range(scene.width)]
-        elif edge == "left":
-            coordinates = [(row, 0) for row in range(scene.height)]
-        elif edge == "right":
-            coordinates = [(row, scene.width - 1) for row in range(scene.height)]
-        else:
-            raise ValueError(f"unsupported edge: {edge}")
-        return np.asarray([env.engine.grid_index(r, c) for r, c in coordinates], dtype=np.int64)
-
-    def _fold_correspondence(self, env: ClothEnv) -> tuple[np.ndarray, np.ndarray]:
+    def _fold_regions(self, env: ClothEnv) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         scene = env.config.scene
         if self.policy_config.controlled_edge not in {"top", "bottom"}:
             raise NotImplementedError("symmetric fold currently supports top/bottom folds")
+        if scene.height % 2 != 0:
+            raise ValueError("symmetric fold currently requires an even grid height")
         half = scene.height // 2
         moving_rows = range(half, scene.height) if self.policy_config.controlled_edge == "bottom" else range(half)
         moving, stationary = [], []
@@ -261,7 +291,13 @@ class SymmetricFoldPolicy:
             for column in range(scene.width):
                 moving.append(env.engine.grid_index(row, column))
                 stationary.append(env.engine.grid_index(partner_row, column))
-        return np.asarray(moving), np.asarray(stationary)
+        if self.policy_config.controlled_edge == "top":
+            pinned_rows = [half + offset for offset in self.policy_config.pinned_line_offsets]
+        else:
+            pinned_rows = [half - 1 - offset for offset in self.policy_config.pinned_line_offsets]
+        pinned_rows = [row for row in pinned_rows if 0 <= row < scene.height]
+        pinned = [env.engine.grid_index(row, column) for row in pinned_rows for column in range(scene.width)]
+        return np.asarray(moving), np.asarray(stationary), np.asarray(pinned)
 
     def rollout(
         self,
@@ -271,22 +307,40 @@ class SymmetricFoldPolicy:
     ) -> SymmetricFoldResult:
         env = ClothEnv(self.env_config)
         observation = env.reset()
-        controlled = self._edge_indices(env, self.policy_config.controlled_edge)
-        anchor = self._edge_indices(env, self.policy_config.anchor_edge)
+        initial_positions = observation["positions"].copy()
+        controlled, _, pinned = self._fold_regions(env)
+        middle_row = env.config.scene.height // 2
+        upper_row, lower_row = middle_row - 1, middle_row
+        axis_origin = 0.5 * (
+            initial_positions[env.engine.grid_index(upper_row, 0)]
+            + initial_positions[env.engine.grid_index(lower_row, 0)]
+        )
+        axis_end = 0.5 * (
+            initial_positions[env.engine.grid_index(upper_row, env.config.scene.width - 1)]
+            + initial_positions[env.engine.grid_index(lower_row, env.config.scene.width - 1)]
+        )
+        axis_direction = axis_end - axis_origin
+        radial = initial_positions[controlled[0]] - axis_origin
+        lift_direction = float(np.cross(axis_direction, radial)[1])
+        rotation_sign = 1.0 if lift_direction > 0.0 else -1.0
+
         pin_flags = env.engine.get_cloth_pin_flags()
-        pin_flags[anchor] = True
+        pin_flags[pinned] = True
         env.engine.set_cloth_pin_flags(pin_flags)
 
-        initial_positions = observation["positions"].copy()
         start_targets = initial_positions[controlled]
-        destination = initial_positions[anchor]
-        if len(destination) != len(controlled):
-            raise ValueError("controlled and anchor edges must have equal vertex counts")
         machine = SymmetricFoldStateMachine(
-            start_targets, destination, controlled, parameters, self.policy_config
+            start_targets,
+            controlled,
+            axis_origin,
+            axis_direction,
+            rotation_sign,
+            parameters,
+            self.policy_config,
         )
 
         positions_all = [observation["positions"].copy()] if record else None
+        evaluation_positions = [observation["positions"].copy()]
         velocities_all = [observation["velocities"].copy()] if record else None
         times = [observation["time"]] if record else None
         targets_all: list[np.ndarray] = []
@@ -297,7 +351,12 @@ class SymmetricFoldPolicy:
         try:
             while not machine.done:
                 action, phase, targets = machine.next_action()
+                if phase == FoldPhase.RELEASE and self.policy_config.pin_final_state:
+                    final_pin_flags = env.engine.get_cloth_pin_flags()
+                    final_pin_flags[controlled] = True
+                    env.engine.set_cloth_pin_flags(final_pin_flags)
                 observation = env.step(action)
+                evaluation_positions.append(observation["positions"].copy())
                 targets_all.append(targets)
                 phases.append(phase.value)
                 if record:
@@ -313,7 +372,11 @@ class SymmetricFoldPolicy:
             final_velocities = observation["velocities"].copy()
             triangles = env.engine.mesh.triangles.copy()
             metrics = self._evaluate(
-                env, final_positions, final_velocities, np.asarray(targets_all), parameters
+                env,
+                np.asarray(evaluation_positions),
+                final_velocities,
+                np.asarray(targets_all),
+                parameters,
             )
         finally:
             env.close()
@@ -322,7 +385,7 @@ class SymmetricFoldPolicy:
             parameters=parameters,
             metrics=metrics,
             controlled_indices=controlled,
-            anchor_indices=anchor,
+            anchor_indices=pinned,
             final_positions=final_positions,
             final_velocities=final_velocities,
             triangles=triangles,
@@ -337,55 +400,46 @@ class SymmetricFoldPolicy:
     def _evaluate(
         self,
         env: ClothEnv,
-        positions: np.ndarray,
+        trajectory_positions: np.ndarray,
         velocities: np.ndarray,
         targets: np.ndarray,
         parameters: SymmetricFoldParameters,
     ) -> dict[str, float | bool]:
-        moving, stationary = self._fold_correspondence(env)
-        desired = positions[stationary].copy()
-        desired[:, 1] += parameters.layer_gap
-        alignment = float(np.linalg.norm(positions[moving] - desired, axis=1).mean())
-
+        moving, stationary, _ = self._fold_regions(env)
         scene = env.config.scene
-        stretch_values = []
-
-        # Compute stretch error for each edge in the cloth mesh:
-        for row in range(scene.height):
-            for column in range(scene.width):
-                index = env.engine.grid_index(row, column)
-                if column + 1 < scene.width:
-                    neighbor = env.engine.grid_index(row, column + 1)
-                    stretch_values.append(abs(np.linalg.norm(positions[index] - positions[neighbor]) / scene.spacing - 1.0))
-                if row + 1 < scene.height:
-                    neighbor = env.engine.grid_index(row + 1, column)
-                    stretch_values.append(abs(np.linalg.norm(positions[index] - positions[neighbor]) / scene.spacing - 1.0))
-        stretch = float(np.mean(stretch_values))
-        mean_speed = float(np.linalg.norm(velocities, axis=1).mean())
-        max_speed = float(np.linalg.norm(velocities, axis=1).max())
-
-        if len(targets) >= 3:
-            second_difference = targets[2:] - 2.0 * targets[1:-1] + targets[:-2]
-            smoothness = float(np.square(second_difference).mean())
-        else:
-            smoothness = 0.0
-
-        c = self.policy_config
-
-        # weighed loss function that combines alignment, stretch, terminal velocity, and smoothness
-        loss = (
-            c.alignment_weight * alignment
-            + c.stretch_weight * stretch
-            + c.terminal_velocity_weight * mean_speed
-            + c.smoothness_weight * smoothness
+        metrics = evaluate_fold_trajectory(
+            trajectory_positions,
+            velocities,
+            targets,
+            moving,
+            stationary,
+            scene.width,
+            scene.height,
+            scene.spacing,
+            scene.dt * env.config.n_substeps,
+            parameters.layer_gap,
+            env.engine.grid_index,
         )
-        success = alignment <= c.success_alignment and max_speed <= c.success_max_speed
-        return {
-            "loss": float(loss),
-            "alignment_error": alignment,
-            "mean_stretch_error": stretch,
-            "terminal_mean_speed": mean_speed,
-            "terminal_max_speed": max_speed,
-            "target_smoothness": smoothness,
-            "success": bool(success),
-        }
+        c = self.policy_config
+        loss = (
+            c.alignment_weight * float(metrics["alignment_error"])
+            + c.energy_weight * float(metrics["control_effort_proxy"])
+            + c.stretch_weight * float(metrics["trajectory_mean_stretch"])
+            + c.max_stretch_weight * float(metrics["trajectory_max_stretch"])
+            + c.penetration_weight * float(metrics["layer_penetration_proxy"])
+            + c.terminal_velocity_weight * float(metrics["terminal_mean_speed"])
+            + c.smoothness_weight * float(metrics["target_smoothness"])
+        )
+        structural_integrity = float(metrics["trajectory_max_stretch"]) <= c.success_max_stretch
+        success = (
+            float(metrics["alignment_error"]) <= c.success_alignment
+            and float(metrics["terminal_max_speed"]) <= c.success_max_speed
+            and float(metrics["aesthetic_quality"]) >= c.success_aesthetic_quality
+            and structural_integrity
+        )
+        metrics.update(
+            loss=float(loss),
+            structural_integrity=bool(structural_integrity),
+            success=bool(success),
+        )
+        return metrics

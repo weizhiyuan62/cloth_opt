@@ -3,32 +3,38 @@ name: diagonal_fold
 setup:
   # main: top-left to bottom-right; anti: top-right to bottom-left.
   fold_diagonal: main
-  # Only this single farthest corner receives position-control commands.
+  # The corner selects which triangular half moves around the crease.
   controlled_corner: top_right
-  # Pinning the two crease endpoints approximates missing table friction.
-  pin_fold_endpoints: true
+  # Pin the diagonal and several parallel lines in the stationary triangle.
+  pinned_line_offsets: [0, 2, 4, 6, 8]
+  pin_final_state: true
   initial_settle_frames: 30
   final_settle_frames: 100
 
 params:
   early_lift_angle: 35.0
   rotate_end_angle: 160.0
-  final_angle: 178.0
+  final_angle: 180.0
   layer_gap: 0.01
   grasp_hold_frames: 20
   early_lift_frames: 30
   rotate_frames: 120
   place_frames: 40
   hold_frames: 50
-  position_gain: 800.0
-  max_force: 150.0
+  position_gain: 2000.0
+  max_force: 500.0
 
 objective:
   alignment_weight: 10.0
+  energy_weight: 0.05
   stationary_weight: 2.0
   crease_weight: 1.0
   stretch_weight: 1.0
+  max_stretch_weight: 2.0
+  penetration_weight: 10.0
   terminal_velocity_weight: 0.5
   smoothness_weight: 0.05
   success_alignment: 0.10
   success_max_speed: 0.10
+  success_aesthetic_quality: 70.0
+  success_max_stretch: 0.35

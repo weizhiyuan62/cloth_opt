@@ -7,6 +7,7 @@ from typing import Any, Callable, Mapping
 import numpy as np
 
 from cloth_opt.sim import ClothAction, ClothEnv, ClothEnvConfig
+from cloth_opt.policy.fold_metrics import evaluate_fold_trajectory
 
 
 class DiagonalFoldPhase(str, Enum):
@@ -25,15 +26,15 @@ class DiagonalFoldPhase(str, Enum):
 class DiagonalFoldParameters:
     early_lift_angle: float = 35.0
     rotate_end_angle: float = 160.0
-    final_angle: float = 178.0
+    final_angle: float = 180.0
     layer_gap: float = 0.01
     grasp_hold_frames: int = 20
     early_lift_frames: int = 30
     rotate_frames: int = 120
     place_frames: int = 40
     hold_frames: int = 50
-    position_gain: float = 800.0
-    max_force: float = 150.0
+    position_gain: float = 2000.0
+    max_force: float = 500.0
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, Any]) -> "DiagonalFoldParameters":
@@ -73,17 +74,23 @@ class DiagonalFoldParameters:
 class DiagonalFoldPolicyConfig:
     fold_diagonal: str = "main"
     controlled_corner: str = "top_right"
-    pin_fold_endpoints: bool = True
+    pinned_line_offsets: tuple[int, ...] = (0, 2, 4, 6, 8)
+    pin_final_state: bool = True
     initial_settle_frames: int = 30
     final_settle_frames: int = 100
     alignment_weight: float = 10.0
+    energy_weight: float = 0.05
     stationary_weight: float = 2.0
     crease_weight: float = 1.0
     stretch_weight: float = 1.0
+    max_stretch_weight: float = 2.0
+    penetration_weight: float = 10.0
     terminal_velocity_weight: float = 0.5
     smoothness_weight: float = 0.05
     success_alignment: float = 0.10
     success_max_speed: float = 0.10
+    success_aesthetic_quality: float = 70.0
+    success_max_stretch: float = 0.35
 
 
 @dataclass
@@ -170,16 +177,16 @@ def _rotate_about_axis(
 class DiagonalFoldStateMachine:
     def __init__(
         self,
-        start_target: np.ndarray,
-        controlled_index: int,
+        start_targets: np.ndarray,
+        controlled_indices: np.ndarray,
         axis_origin: np.ndarray,
         axis_direction: np.ndarray,
         rotation_sign: float,
         parameters: DiagonalFoldParameters,
         policy_config: DiagonalFoldPolicyConfig,
     ) -> None:
-        self.start_target = np.asarray(start_target, dtype=np.float64).reshape(1, 3)
-        self.controlled_index = int(controlled_index)
+        self.start_targets = np.asarray(start_targets, dtype=np.float64).reshape(-1, 3)
+        self.controlled_indices = np.asarray(controlled_indices, dtype=np.int64)
         self.axis_origin = np.asarray(axis_origin, dtype=np.float64)
         self.axis_direction = np.asarray(axis_direction, dtype=np.float64)
         self.rotation_sign = float(rotation_sign)
@@ -228,7 +235,7 @@ class DiagonalFoldStateMachine:
     def _angle_target(self, angle_degrees: float) -> np.ndarray:
         angle = self.rotation_sign * np.deg2rad(angle_degrees)
         return _rotate_about_axis(
-            self.start_target, self.axis_origin, self.axis_direction, angle
+            self.start_targets, self.axis_origin, self.axis_direction, angle
         )
 
     def _interpolated_angle_target(
@@ -240,7 +247,7 @@ class DiagonalFoldStateMachine:
     def _position_action(self, target: np.ndarray) -> ClothAction:
         return ClothAction(
             mode="position",
-            vertex_indices=np.asarray([self.controlled_index], dtype=np.int64),
+            vertex_indices=self.controlled_indices,
             values=target,
             params={
                 "gain": self.parameters.position_gain,
@@ -260,10 +267,10 @@ class DiagonalFoldStateMachine:
         p = self.parameters
 
         if phase == DiagonalFoldPhase.INITIAL_SETTLE:
-            target = self.start_target
+            target = self.start_targets
             action = None
         elif phase == DiagonalFoldPhase.GRASP_HOLD:
-            target = self.start_target
+            target = self.start_targets
             action = self._position_action(target)
         elif phase == DiagonalFoldPhase.EARLY_LIFT:
             target = self._interpolated_angle_target(0.0, p.early_lift_angle, progress)
@@ -339,7 +346,7 @@ class DiagonalFoldPolicy:
 
     def _fold_geometry(
         self, env: ClothEnv, initial_positions: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    ) -> tuple[np.ndarray, np.ndarray, float]:
         last = env.config.scene.height - 1
         endpoints = (
             ((0, 0), (last, last))
@@ -353,27 +360,23 @@ class DiagonalFoldPolicy:
         axis_direction = initial_positions[anchor_indices[1]] - axis_origin
 
         corner_coordinate = self._corner_coordinate(env, self.policy_config.controlled_corner)
-        controlled_index = env.engine.grid_index(*corner_coordinate)
-        radial = initial_positions[controlled_index] - axis_origin
+        corner_index = env.engine.grid_index(*corner_coordinate)
+        radial = initial_positions[corner_index] - axis_origin
         lift_direction = float(np.cross(axis_direction, radial)[1])
         if abs(lift_direction) < 1e-12:
             raise ValueError("controlled corner lies on the selected fold axis")
         rotation_sign = 1.0 if lift_direction > 0.0 else -1.0
-        return (
-            np.asarray([controlled_index], dtype=np.int64),
-            anchor_indices,
-            axis_direction,
-            rotation_sign,
-        )
+        return anchor_indices, axis_direction, rotation_sign
 
     def _fold_correspondence(
         self, env: ClothEnv
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         scene = env.config.scene
         last = scene.height - 1
         moving: list[int] = []
         stationary: list[int] = []
         crease: list[int] = []
+        pinned: list[int] = []
         corner = self.policy_config.controlled_corner
 
         for row in range(scene.height):
@@ -390,14 +393,19 @@ class DiagonalFoldPolicy:
                 index = env.engine.grid_index(row, column)
                 if side == 0:
                     crease.append(index)
+                    if 0 in self.policy_config.pinned_line_offsets:
+                        pinned.append(index)
                 elif is_moving:
                     moving.append(index)
                     stationary.append(env.engine.grid_index(*partner))
+                elif abs(side) in self.policy_config.pinned_line_offsets:
+                    pinned.append(index)
 
         return (
             np.asarray(moving, dtype=np.int64),
             np.asarray(stationary, dtype=np.int64),
             np.asarray(crease, dtype=np.int64),
+            np.asarray(pinned, dtype=np.int64),
         )
 
     def rollout(
@@ -413,20 +421,20 @@ class DiagonalFoldPolicy:
         observation = env.reset()
         self._validate_scene(env)
         initial_positions = observation["positions"].copy()
-        controlled, anchor, axis_direction, rotation_sign = self._fold_geometry(
+        axis_indices, axis_direction, rotation_sign = self._fold_geometry(
             env, initial_positions
         )
-        moving, stationary, crease = self._fold_correspondence(env)
+        moving, stationary, crease, pinned = self._fold_correspondence(env)
+        controlled = moving
 
-        if self.policy_config.pin_fold_endpoints:
-            pin_flags = env.engine.get_cloth_pin_flags()
-            pin_flags[anchor] = True
-            env.engine.set_cloth_pin_flags(pin_flags)
+        pin_flags = env.engine.get_cloth_pin_flags()
+        pin_flags[pinned] = True
+        env.engine.set_cloth_pin_flags(pin_flags)
 
         machine = DiagonalFoldStateMachine(
-            start_target=initial_positions[controlled],
-            controlled_index=int(controlled[0]),
-            axis_origin=initial_positions[anchor[0]],
+            start_targets=initial_positions[controlled],
+            controlled_indices=controlled,
+            axis_origin=initial_positions[axis_indices[0]],
             axis_direction=axis_direction,
             rotation_sign=rotation_sign,
             parameters=parameters,
@@ -434,6 +442,7 @@ class DiagonalFoldPolicy:
         )
 
         positions_all = [initial_positions.copy()] if record else None
+        evaluation_positions = [initial_positions.copy()]
         velocities_all = [observation["velocities"].copy()] if record else None
         times = [observation["time"]] if record else None
         targets_all: list[np.ndarray] = []
@@ -444,7 +453,12 @@ class DiagonalFoldPolicy:
         try:
             while not machine.done:
                 action, phase, target = machine.next_action()
+                if phase == DiagonalFoldPhase.RELEASE and self.policy_config.pin_final_state:
+                    final_pin_flags = env.engine.get_cloth_pin_flags()
+                    final_pin_flags[controlled] = True
+                    env.engine.set_cloth_pin_flags(final_pin_flags)
                 observation = env.step(action)
+                evaluation_positions.append(observation["positions"].copy())
                 targets_all.append(target)
                 phases.append(phase.value)
                 if record:
@@ -462,7 +476,7 @@ class DiagonalFoldPolicy:
             metrics = self._evaluate(
                 env,
                 initial_positions,
-                final_positions,
+                np.asarray(evaluation_positions),
                 final_velocities,
                 moving,
                 stationary,
@@ -477,7 +491,7 @@ class DiagonalFoldPolicy:
             parameters=parameters,
             metrics=metrics,
             controlled_indices=controlled,
-            anchor_indices=anchor,
+            anchor_indices=pinned,
             moving_indices=moving,
             stationary_indices=stationary,
             final_positions=final_positions,
@@ -495,7 +509,7 @@ class DiagonalFoldPolicy:
         self,
         env: ClothEnv,
         initial_positions: np.ndarray,
-        positions: np.ndarray,
+        trajectory_positions: np.ndarray,
         velocities: np.ndarray,
         moving: np.ndarray,
         stationary: np.ndarray,
@@ -503,60 +517,52 @@ class DiagonalFoldPolicy:
         targets: np.ndarray,
         parameters: DiagonalFoldParameters,
     ) -> dict[str, float | bool]:
-        desired = positions[stationary].copy()
-        desired[:, 1] += parameters.layer_gap
-        alignment = float(np.linalg.norm(positions[moving] - desired, axis=1).mean())
+        final_positions = trajectory_positions[-1]
         stationary_drift = float(
-            np.linalg.norm(positions[stationary] - initial_positions[stationary], axis=1).mean()
+            np.linalg.norm(final_positions[stationary] - initial_positions[stationary], axis=1).mean()
         )
         crease_error = float(
-            np.linalg.norm(positions[crease] - initial_positions[crease], axis=1).mean()
+            np.linalg.norm(final_positions[crease] - initial_positions[crease], axis=1).mean()
         )
 
         scene = env.config.scene
-        stretch_values: list[float] = []
-        for row in range(scene.height):
-            for column in range(scene.width):
-                index = env.engine.grid_index(row, column)
-                if column + 1 < scene.width:
-                    neighbor = env.engine.grid_index(row, column + 1)
-                    stretch_values.append(
-                        abs(np.linalg.norm(positions[index] - positions[neighbor]) / scene.spacing - 1.0)
-                    )
-                if row + 1 < scene.height:
-                    neighbor = env.engine.grid_index(row + 1, column)
-                    stretch_values.append(
-                        abs(np.linalg.norm(positions[index] - positions[neighbor]) / scene.spacing - 1.0)
-                    )
-        stretch = float(np.mean(stretch_values))
-        speeds = np.linalg.norm(velocities, axis=1)
-        mean_speed = float(speeds.mean())
-        max_speed = float(speeds.max())
-
-        if len(targets) >= 3:
-            second_difference = targets[2:] - 2.0 * targets[1:-1] + targets[:-2]
-            smoothness = float(np.square(second_difference).mean())
-        else:
-            smoothness = 0.0
-
+        metrics = evaluate_fold_trajectory(
+            trajectory_positions,
+            velocities,
+            targets,
+            moving,
+            stationary,
+            scene.width,
+            scene.height,
+            scene.spacing,
+            scene.dt * env.config.n_substeps,
+            parameters.layer_gap,
+            env.engine.grid_index,
+        )
         c = self.policy_config
         loss = (
-            c.alignment_weight * alignment
+            c.alignment_weight * float(metrics["alignment_error"])
+            + c.energy_weight * float(metrics["control_effort_proxy"])
             + c.stationary_weight * stationary_drift
             + c.crease_weight * crease_error
-            + c.stretch_weight * stretch
-            + c.terminal_velocity_weight * mean_speed
-            + c.smoothness_weight * smoothness
+            + c.stretch_weight * float(metrics["trajectory_mean_stretch"])
+            + c.max_stretch_weight * float(metrics["trajectory_max_stretch"])
+            + c.penetration_weight * float(metrics["layer_penetration_proxy"])
+            + c.terminal_velocity_weight * float(metrics["terminal_mean_speed"])
+            + c.smoothness_weight * float(metrics["target_smoothness"])
         )
-        success = alignment <= c.success_alignment and max_speed <= c.success_max_speed
-        return {
+        structural_integrity = float(metrics["trajectory_max_stretch"]) <= c.success_max_stretch
+        success = (
+            float(metrics["alignment_error"]) <= c.success_alignment
+            and float(metrics["terminal_max_speed"]) <= c.success_max_speed
+            and float(metrics["aesthetic_quality"]) >= c.success_aesthetic_quality
+            and structural_integrity
+        )
+        metrics.update({
             "loss": float(loss),
-            "alignment_error": alignment,
             "stationary_drift": stationary_drift,
             "crease_error": crease_error,
-            "mean_stretch_error": stretch,
-            "terminal_mean_speed": mean_speed,
-            "terminal_max_speed": max_speed,
-            "target_smoothness": smoothness,
+            "structural_integrity": bool(structural_integrity),
             "success": bool(success),
-        }
+        })
+        return metrics

@@ -1,6 +1,7 @@
 from pathlib import Path
 import shutil
 
+import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from cloth_opt.sim import ClothEnvConfig, SingleCameraRenderer, frames_to_video
@@ -16,7 +17,8 @@ def make_diagonal_policy_config(policy_cfg: DictConfig) -> DiagonalFoldPolicyCon
     return DiagonalFoldPolicyConfig(
         fold_diagonal=str(policy_cfg.setup.fold_diagonal),
         controlled_corner=str(policy_cfg.setup.controlled_corner),
-        pin_fold_endpoints=bool(policy_cfg.setup.pin_fold_endpoints),
+        pinned_line_offsets=tuple(int(value) for value in policy_cfg.setup.pinned_line_offsets),
+        pin_final_state=bool(policy_cfg.setup.pin_final_state),
         initial_settle_frames=int(policy_cfg.setup.initial_settle_frames),
         final_settle_frames=int(policy_cfg.setup.final_settle_frames),
         **objective,
@@ -52,14 +54,19 @@ def render_diagonal_result(
         elevation=float(render_cfg.camera.elevation),
         azimuth=float(render_cfg.camera.azimuth),
     )
+    initial_controlled = result.positions[0, result.controlled_indices]
+    center_xz = result.positions[0][:, [0, 2]].mean(axis=0)
+    corner_offset = initial_controlled[:, [0, 2]] - center_xz
+    display_local_index = int(np.linalg.norm(corner_offset, axis=1).argmax())
+    display_indices = result.controlled_indices[[display_local_index]]
     try:
         for frame_index, (positions, target, phase) in enumerate(
             zip(result.positions[1:], result.target_positions, result.phases)
         ):
             renderer.save_frame(
                 positions,
-                result.controlled_indices,
-                target,
+                display_indices,
+                target[[display_local_index]],
                 frame_dir / f"frame_{frame_index:05d}.png",
                 title=f"Diagonal fold: {phase}",
             )

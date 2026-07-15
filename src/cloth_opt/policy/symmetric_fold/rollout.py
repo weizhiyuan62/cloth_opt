@@ -1,6 +1,7 @@
 from pathlib import Path
 import shutil
 
+import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from cloth_opt.sim import ClothEnvConfig, SingleCameraRenderer, frames_to_video
@@ -16,7 +17,8 @@ def make_symmetric_policy_config(policy_cfg: DictConfig) -> SymmetricFoldPolicyC
     assert isinstance(objective, dict)
     return SymmetricFoldPolicyConfig(
         controlled_edge=str(policy_cfg.setup.controlled_edge),
-        anchor_edge=str(policy_cfg.setup.anchor_edge),
+        pinned_line_offsets=tuple(int(value) for value in policy_cfg.setup.pinned_line_offsets),
+        pin_final_state=bool(policy_cfg.setup.pin_final_state),
         initial_settle_frames=int(policy_cfg.setup.initial_settle_frames),
         final_settle_frames=int(policy_cfg.setup.final_settle_frames),
         **objective,
@@ -52,14 +54,19 @@ def render_fold_result(
         elevation=float(render_cfg.camera.elevation),
         azimuth=float(render_cfg.camera.azimuth),
     )
+    initial_controlled = result.positions[0, result.controlled_indices]
+    center_z = float(result.positions[0, :, 2].mean())
+    distance_from_crease = np.abs(initial_controlled[:, 2] - center_z)
+    display_mask = np.isclose(distance_from_crease, distance_from_crease.max())
+    display_indices = result.controlled_indices[display_mask]
     try:
         for frame_index, (positions, targets, phase) in enumerate(
             zip(result.positions[1:], result.target_positions, result.phases)
         ):
             renderer.save_frame(
                 positions,
-                result.controlled_indices,
-                targets,
+                display_indices,
+                targets[display_mask],
                 frame_dir / f"frame_{frame_index:05d}.png",
                 title=f"Symmetric fold: {phase}",
             )

@@ -6,11 +6,15 @@ defaults:
 
 seed: 0
 
-# Start close to the table. The anchor edge is pinned by the policy as a proxy for
-# table friction, which the current simulator does not yet model dynamically.
+# Start on the table. For the even 10x10 grid, the fold axis lies between the
+# two center rows. Several stationary-side rows are pinned to sharpen the fold.
 env:
-  reset_height: 0.02
+  reset_height: 0.0
   n_substeps: 10
+  scene:
+    width: 10
+    height: 10
+    spacing: 0.1
 
 hydra:
   run:

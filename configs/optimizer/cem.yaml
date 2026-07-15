@@ -8,16 +8,16 @@ minimum_std_fraction: 0.01
 seed: ${seed}
 
 parameter_names:
-  - lift_height
-  - arc_height
-  - landing_offset
-  - place_clearance
+  - lift_angle
+  - transfer_angle
+  - final_angle
   - layer_gap
   - lift_frames
   - transfer_frames
   - place_frames
+  - hold_frames
   - position_gain
   - max_force
 
-lower_bounds: [0.05, 0.00, -0.10, 0.01, 0.002, 5, 20, 5, 200, 20]
-upper_bounds: [0.50, 0.50,  0.10, 0.15, 0.050, 60, 120, 60, 2000, 250]
+lower_bounds: [20, 120, 170, 0.002, 20, 60, 20, 20, 500, 100]
+upper_bounds: [80, 168, 180, 0.030, 100, 240, 120, 120, 4000, 1000]

@@ -19,20 +19,23 @@ namespace ClothOpt {
 
 void SemiImplicitEulerIntegrator::step(ClothMesh& mesh, double dt) {
     stepCount_++;
-    
+
     // Clear forces
     std::fill(mesh.forces.begin(), mesh.forces.end(), Eigen::Vector3d::Zero());
-    
+
     // Apply forces
     applyGravity(mesh, dt);
     applySpringForces(mesh, dt);
-    
+
+    // Calculate vertex mass for integration
+    double vertexMass = mesh.properties.mass / mesh.getVertexCount();
+
     // Update velocities and positions in one pass
     for (size_t i = 0; i < mesh.getVertexCount(); ++i) {
         if (mesh.pinned[i]) continue;
-        
-        // Update velocity
-        Eigen::Vector3d acceleration = mesh.forces[i] / mesh.properties.mass;
+
+        // Update velocity (divide by vertex mass, not total mass)
+        Eigen::Vector3d acceleration = mesh.forces[i] / vertexMass;
         mesh.velocities[i] = mesh.velocities[i] * mesh.properties.damping + acceleration * dt;
         
         // Update position

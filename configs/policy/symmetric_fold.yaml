@@ -3,7 +3,7 @@ name: symmetric_fold
 setup:
   controlled_edge: top
   # Stationary-side rows measured from the virtual crease: rows 5, 7, and 9.
-  pinned_line_offsets: [0, 2, 4]
+  pinned_line_offsets: [0]
   pin_final_state: true
   initial_settle_frames: 30
   final_settle_frames: 100

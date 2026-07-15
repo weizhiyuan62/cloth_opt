@@ -74,8 +74,8 @@ class DiagonalFoldParameters:
 class DiagonalFoldPolicyConfig:
     fold_diagonal: str = "main"
     controlled_corner: str = "top_right"
-    pinned_line_offsets: tuple[int, ...] = (0, 2, 4, 6, 8)
-    pin_final_state: bool = True
+    pinned_line_offsets: tuple[int, ...] = (0,)
+    pin_final_state: bool = False
     initial_settle_frames: int = 30
     final_settle_frames: int = 100
     alignment_weight: float = 10.0
@@ -425,7 +425,13 @@ class DiagonalFoldPolicy:
             env, initial_positions
         )
         moving, stationary, crease, pinned = self._fold_correspondence(env)
-        controlled = moving
+        corner_coordinate = self._corner_coordinate(
+            env, self.policy_config.controlled_corner
+        )
+        corner_index = env.engine.grid_index(*corner_coordinate)
+        if corner_index not in moving:
+            raise RuntimeError("controlled corner is not in the moving triangle")
+        controlled = np.asarray([corner_index], dtype=np.int64)
 
         pin_flags = env.engine.get_cloth_pin_flags()
         pin_flags[pinned] = True

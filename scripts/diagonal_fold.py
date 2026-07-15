@@ -40,7 +40,7 @@ def main(cfg: DictConfig) -> None:
     result.save(run_dir)
     render_diagonal_result(result, env_config, cfg.render, run_dir)
 
-    logger.info("controlled moving-surface vertices: %d", len(result.controlled_indices))
+    logger.info("controlled corner vertices: %d", len(result.controlled_indices))
     logger.info("loss: %.6f", result.loss)
     logger.info("metrics: %s", result.metrics)
     logger.info("saved rollout: %s", run_dir)

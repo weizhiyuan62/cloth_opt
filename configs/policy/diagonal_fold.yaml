@@ -3,11 +3,11 @@ name: diagonal_fold
 setup:
   # main: top-left to bottom-right; anti: top-right to bottom-left.
   fold_diagonal: main
-  # The corner selects which triangular half moves around the crease.
+  # This single corner vertex is the only position-controlled grasp point.
   controlled_corner: top_right
-  # Pin the diagonal and several parallel lines in the stationary triangle.
-  pinned_line_offsets: [0, 2, 4, 6, 8]
-  pin_final_state: true
+  # Offset 0 pins only the 10-vertex diagonal crease.
+  pinned_line_offsets: [0]
+  pin_final_state: false
   initial_settle_frames: 30
   final_settle_frames: 100
 

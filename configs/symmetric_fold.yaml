@@ -6,8 +6,8 @@ defaults:
 
 seed: 0
 
-# Start on the table. For the even 10x10 grid, the fold axis lies between the
-# two center rows. Several stationary-side rows are pinned to sharpen the fold.
+# Start close to the table. The outer edge is controlled and stationary row 5
+# is pinned as the discrete crease beside the virtual center axis.
 env:
   reset_height: 0.01
   n_substeps: 10

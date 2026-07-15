@@ -79,14 +79,13 @@ fixed high-level state machine is:
 initial_settle -> lift -> transfer -> place -> hold -> release -> final_settle
 ```
 
-Every vertex in the moving half receives a staged rotational position target.
-The default cloth is the original **10 x 10 vertices**. Because an even grid
-has no row exactly on the center, the fold axis is the geometric line between
-rows 4 and 5. Rows 5, 7, and 9 on the stationary side are pinned by default;
-this keeps the support side flat and makes the fold visibly form around the
-virtual center line without freezing every stationary vertex.
-After the final hold, the moving half is pinned in place before its controller
-is cleared, preventing visual rebound in the current contact-free simulator.
+Only the 10 vertices on the outer moving edge receive staged rotational
+position targets. The intervening moving-half rows remain physical, allowing
+gravity and spring forces to create curvature. The default cloth is the
+original **10 x 10 vertices**. Because an even grid has no row exactly on the
+center, the geometric fold axis lies between rows 4 and 5, while stationary
+row 5 is pinned as the discrete crease line. At release, the edge controller is
+cleared and the moving surface remains unpinned during final settling.
 Run the hand-initialized baseline with:
 
 ```bash

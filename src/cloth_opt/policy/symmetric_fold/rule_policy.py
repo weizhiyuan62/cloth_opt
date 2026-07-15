@@ -57,8 +57,8 @@ class SymmetricFoldParameters:
 @dataclass(frozen=True)
 class SymmetricFoldPolicyConfig:
     controlled_edge: str = "bottom"
-    pinned_line_offsets: tuple[int, ...] = (0, 2, 4)
-    pin_final_state: bool = True
+    pinned_line_offsets: tuple[int, ...] = (0,)
+    pin_final_state: bool = False
     initial_settle_frames: int = 20
     final_settle_frames: int = 40
     alignment_weight: float = 10.0
@@ -277,13 +277,20 @@ class SymmetricFoldPolicy:
         self.env_config = env_config
         self.policy_config = policy_config
 
-    def _fold_regions(self, env: ClothEnv) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _fold_regions(
+        self, env: ClothEnv
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         scene = env.config.scene
         if self.policy_config.controlled_edge not in {"top", "bottom"}:
             raise NotImplementedError("symmetric fold currently supports top/bottom folds")
         if scene.height % 2 != 0:
             raise ValueError("symmetric fold currently requires an even grid height")
         half = scene.height // 2
+        controlled_row = 0 if self.policy_config.controlled_edge == "top" else scene.height - 1
+        controlled = [
+            env.engine.grid_index(controlled_row, column)
+            for column in range(scene.width)
+        ]
         moving_rows = range(half, scene.height) if self.policy_config.controlled_edge == "bottom" else range(half)
         moving, stationary = [], []
         for row in moving_rows:
@@ -297,7 +304,12 @@ class SymmetricFoldPolicy:
             pinned_rows = [half - 1 - offset for offset in self.policy_config.pinned_line_offsets]
         pinned_rows = [row for row in pinned_rows if 0 <= row < scene.height]
         pinned = [env.engine.grid_index(row, column) for row in pinned_rows for column in range(scene.width)]
-        return np.asarray(moving), np.asarray(stationary), np.asarray(pinned)
+        return (
+            np.asarray(controlled, dtype=np.int64),
+            np.asarray(moving, dtype=np.int64),
+            np.asarray(stationary, dtype=np.int64),
+            np.asarray(pinned, dtype=np.int64),
+        )
 
     def rollout(
         self,
@@ -308,7 +320,7 @@ class SymmetricFoldPolicy:
         env = ClothEnv(self.env_config)
         observation = env.reset()
         initial_positions = observation["positions"].copy()
-        controlled, _, pinned = self._fold_regions(env)
+        controlled, _, _, pinned = self._fold_regions(env)
         middle_row = env.config.scene.height // 2
         upper_row, lower_row = middle_row - 1, middle_row
         axis_origin = 0.5 * (
@@ -405,7 +417,7 @@ class SymmetricFoldPolicy:
         targets: np.ndarray,
         parameters: SymmetricFoldParameters,
     ) -> dict[str, float | bool]:
-        moving, stationary, _ = self._fold_regions(env)
+        _, moving, stationary, _ = self._fold_regions(env)
         scene = env.config.scene
         metrics = evaluate_fold_trajectory(
             trajectory_positions,

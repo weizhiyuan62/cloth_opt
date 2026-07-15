@@ -13,14 +13,14 @@ setup:
 
 params:
   early_lift_angle: 35.0
-  rotate_end_angle: 160.0
+  rotate_end_angle: 145.0
   final_angle: 180.0
   layer_gap: 0.01
-  grasp_hold_frames: 20
-  early_lift_frames: 30
-  rotate_frames: 120
-  place_frames: 40
-  hold_frames: 50
+  grasp_hold_frames: 40
+  early_lift_frames: 60
+  rotate_frames: 180
+  place_frames: 70
+  hold_frames: 70
   position_gain: 2000.0
   max_force: 500.0
 

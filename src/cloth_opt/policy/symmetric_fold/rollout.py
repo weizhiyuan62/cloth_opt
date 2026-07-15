@@ -4,7 +4,7 @@ import shutil
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
-from cloth_opt.sim import ClothEnvConfig, SingleCameraRenderer, frames_to_video
+from cloth_opt.sim import ClothEnvConfig, frames_to_video, make_single_camera_renderer
 from .rule_policy import (
     SymmetricFoldParameters,
     SymmetricFoldResult,
@@ -41,18 +41,14 @@ def render_fold_result(
         return
     if result.positions is None or result.target_positions is None or result.phases is None:
         raise ValueError("rendering requires a recorded rollout")
-    if render_cfg.backend != "matplotlib":
-        raise ValueError(f"unsupported render backend: {render_cfg.backend}")
-
     output_dir = Path(output_dir)
     frame_dir = output_dir / "frames"
     scene = env_config.scene
     extent = max((scene.width - 1) * scene.spacing, (scene.height - 1) * scene.spacing)
-    renderer = SingleCameraRenderer(
+    renderer = make_single_camera_renderer(
         result.triangles,
         bounds=((-0.4, extent + 0.4), (-0.4, extent + 0.4), (0.0, 1.2)),
-        elevation=float(render_cfg.camera.elevation),
-        azimuth=float(render_cfg.camera.azimuth),
+        render_cfg=render_cfg,
     )
     initial_controlled = result.positions[0, result.controlled_indices]
     center_z = float(result.positions[0, :, 2].mean())

@@ -1,7 +1,9 @@
-enabled: false
-backend: none
+enabled: true
+backend: polyscope
 keep_frames: false
-fps: 30
+fps: 50
+# auto tries GLFW first and EGL on a display-less Linux server.
+# Use egl or glfw to require one backend explicitly.
 engine: auto
 image_width: 960
 image_height: 720

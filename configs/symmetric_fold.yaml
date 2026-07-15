@@ -1,7 +1,7 @@
 defaults:
   - env: default
   - policy: symmetric_fold
-  - render: enabled
+  - render: native
   - _self_
 
 seed: 0

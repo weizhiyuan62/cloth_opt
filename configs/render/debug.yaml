@@ -1,13 +1,13 @@
-enabled: false
-backend: none
+enabled: true
+backend: matplotlib
 keep_frames: false
-fps: 30
+fps: 50
 engine: auto
-image_width: 960
+image_width: 840
 image_height: 720
 material: wax
 ground_plane: shadow_only
 camera:
-  elevation: 28.0
-  azimuth: 45.0
+  elevation: 25.0
+  azimuth: -45.0
   distance_scale: 1.0

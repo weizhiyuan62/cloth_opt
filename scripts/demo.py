@@ -15,8 +15,8 @@ from cloth_opt.sim import (
     ClothEnv,
     ClothEnvConfig,
     SceneConfig,
-    SingleCameraRenderer,
     frames_to_video,
+    make_single_camera_renderer,
 )
 
 
@@ -63,19 +63,16 @@ def make_env_config(cfg: DictConfig) -> ClothEnvConfig:
     )
 
 
-def make_renderer(cfg: DictConfig, env: ClothEnv) -> SingleCameraRenderer | None:
+def make_renderer(cfg: DictConfig, env: ClothEnv):
     if not cfg.render.enabled:
         return None
-    if cfg.render.backend != "matplotlib":
-        raise ValueError(f"unsupported render backend: {cfg.render.backend}")
 
     scene = env.config.scene
     extent = max((scene.width - 1) * scene.spacing, (scene.height - 1) * scene.spacing)
-    return SingleCameraRenderer(
+    return make_single_camera_renderer(
         env.engine.mesh.triangles,
         bounds=((-0.4, extent + 0.4), (-0.4, extent + 0.4), (0.0, 1.2)),
-        elevation=float(cfg.render.camera.elevation),
-        azimuth=float(cfg.render.camera.azimuth),
+        render_cfg=cfg.render,
     )
 
 

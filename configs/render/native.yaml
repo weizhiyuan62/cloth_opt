@@ -5,11 +5,25 @@ fps: 50
 # auto tries GLFW first and EGL on a display-less Linux server.
 # Use egl or glfw to require one backend explicitly.
 engine: auto
-image_width: 960
+image_width: 1280
 image_height: 720
 material: wax
-ground_plane: shadow_only
 camera:
-  elevation: 28.0
-  azimuth: 45.0
-  distance_scale: 1.0
+  # Matches cpp/apps/optimization.cpp for the default 0.9 x 0.9 cloth.
+  offset_xz: [0.8, 0.8]
+  height: 0.8
+  target_height: 0.3
+appearance:
+  # null preserves Polyscope's original default background.
+  background_color: null
+  cloth_color: [0.3, 0.7, 0.9]
+  edge_width: 1.0
+  smooth_shade: false
+  ground_color: [0.5, 0.5, 0.5]
+  ground_margin: 0.2
+  ground_height: 0.0
+  control_color: [1.0, 0.0, 0.0]
+  control_radius: 0.015
+  # Target markers are Python-rollout additions, absent from the original app.
+  target_color: [0.0, 1.0, 0.0]
+  target_radius: 0.012

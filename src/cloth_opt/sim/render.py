@@ -1,5 +1,4 @@
 from pathlib import Path
-import math
 import os
 import shutil
 import subprocess
@@ -85,14 +84,24 @@ class PolyscopeRenderer:
         self,
         triangles: np.ndarray,
         bounds: tuple[tuple[float, float], tuple[float, float], tuple[float, float]],
-        elevation: float = 28.0,
-        azimuth: float = 45.0,
-        distance_scale: float = 1.0,
-        image_width: int = 960,
+        camera_offset_xz: tuple[float, float] = (0.8, 0.8),
+        camera_height: float = 0.8,
+        camera_target_height: float = 0.3,
+        image_width: int = 1280,
         image_height: int = 720,
         engine: str = "auto",
         material: str = "wax",
-        ground_plane: str = "shadow_only",
+        background_color: tuple[float, float, float] | None = None,
+        cloth_color: tuple[float, float, float] = (0.3, 0.7, 0.9),
+        edge_width: float = 1.0,
+        smooth_shade: bool = False,
+        ground_color: tuple[float, float, float] = (0.5, 0.5, 0.5),
+        ground_margin: float = 0.2,
+        ground_height: float = 0.0,
+        control_color: tuple[float, float, float] = (1.0, 0.0, 0.0),
+        control_radius: float = 0.015,
+        target_color: tuple[float, float, float] = (0.0, 1.0, 0.0),
+        target_radius: float = 0.012,
     ) -> None:
         try:
             import polyscope as ps
@@ -104,8 +113,10 @@ class PolyscopeRenderer:
 
         if image_width <= 0 or image_height <= 0:
             raise ValueError("native render image dimensions must be positive")
-        if distance_scale <= 0.0:
-            raise ValueError("native render camera.distance_scale must be positive")
+        if edge_width < 0.0 or ground_margin < 0.0:
+            raise ValueError("native edge width and ground margin must be non-negative")
+        if control_radius <= 0.0 or target_radius <= 0.0:
+            raise ValueError("native marker radii must be positive")
         engine_names = {
             "auto": None,
             "egl": "openGL3_egl",
@@ -117,37 +128,27 @@ class PolyscopeRenderer:
         self._ps = ps
         self._triangles = np.asarray(triangles, dtype=np.int64)
         self._mesh = None
+        self._ground = None
         self._controlled = None
         self._targets = None
         self._closed = False
         self._material = material
-
-        x_bounds, z_bounds, y_bounds = bounds
-        extent = max(
-            x_bounds[1] - x_bounds[0],
-            z_bounds[1] - z_bounds[0],
-            y_bounds[1] - y_bounds[0],
-        )
-        target = np.asarray(
-            [
-                0.5 * sum(x_bounds),
-                max(0.0, y_bounds[0]) + 0.15 * extent,
-                0.5 * sum(z_bounds),
-            ],
-            dtype=np.float64,
-        )
-        distance = distance_scale * extent
-        elevation_radians = math.radians(elevation)
-        azimuth_radians = math.radians(azimuth)
-        horizontal = distance * math.cos(elevation_radians)
-        self._camera_position = target + np.asarray(
-            [
-                horizontal * math.cos(azimuth_radians),
-                distance * math.sin(elevation_radians),
-                horizontal * math.sin(azimuth_radians),
-            ]
-        )
-        self._camera_target = target
+        self._camera_offset_xz = np.asarray(camera_offset_xz, dtype=np.float64)
+        if self._camera_offset_xz.shape != (2,):
+            raise ValueError("native camera.offset_xz must contain two values")
+        self._camera_height = float(camera_height)
+        self._camera_target_height = float(camera_target_height)
+        self._cloth_color = tuple(float(value) for value in cloth_color)
+        self._edge_width = float(edge_width)
+        self._smooth_shade = bool(smooth_shade)
+        self._ground_color = tuple(float(value) for value in ground_color)
+        self._ground_margin = float(ground_margin)
+        self._ground_height = float(ground_height)
+        self._control_color = tuple(float(value) for value in control_color)
+        self._control_radius = float(control_radius)
+        self._target_color = tuple(float(value) for value in target_color)
+        self._target_radius = float(target_radius)
+        del bounds  # Native camera/ground geometry is derived from the initial cloth.
 
         ps.set_allow_headless_backends(True)
         selected_engine = engine_names[engine]
@@ -159,8 +160,10 @@ class PolyscopeRenderer:
         ps.set_front_dir("z_front")
         ps.set_window_size(int(image_width), int(image_height))
         ps.set_window_resizable(False)
-        ps.set_ground_plane_mode(ground_plane)
-        ps.set_ground_plane_height(0.0)
+        # The original Optimization app registers its own gray ground mesh.
+        ps.set_ground_plane_mode("none")
+        if background_color is not None:
+            ps.set_background_color(tuple(float(value) for value in background_color))
 
     def _initialize_structures(
         self,
@@ -172,27 +175,52 @@ class PolyscopeRenderer:
             "Cloth",
             positions,
             self._triangles,
-            color=(0.25, 0.62, 0.92),
-            edge_color=(0.06, 0.10, 0.16),
-            edge_width=0.7,
-            smooth_shade=True,
+            color=self._cloth_color,
+            edge_width=self._edge_width,
+            smooth_shade=self._smooth_shade,
             material=self._material,
+        )
+        minimum = positions[:, [0, 2]].min(axis=0) - self._ground_margin
+        maximum = positions[:, [0, 2]].max(axis=0) + self._ground_margin
+        ground_vertices = np.asarray(
+            [
+                [minimum[0], self._ground_height, minimum[1]],
+                [maximum[0], self._ground_height, minimum[1]],
+                [maximum[0], self._ground_height, maximum[1]],
+                [minimum[0], self._ground_height, maximum[1]],
+            ],
+            dtype=np.float64,
+        )
+        ground_triangles = np.asarray([[0, 1, 2], [0, 2, 3]], dtype=np.int64)
+        self._ground = self._ps.register_surface_mesh(
+            "Ground", ground_vertices, ground_triangles, color=self._ground_color
         )
         self._controlled = self._ps.register_point_cloud(
             "Controlled vertices",
             controlled_positions,
-            radius=0.012,
-            color=(0.9, 0.08, 0.06),
-            material="wax",
+            radius=self._control_radius,
+            color=self._control_color,
         )
         self._targets = self._ps.register_point_cloud(
             "Position targets",
             targets,
-            radius=0.010,
-            color=(0.12, 0.85, 0.18),
-            material="wax",
+            radius=self._target_radius,
+            color=self._target_color,
         )
-        self._ps.look_at(self._camera_position, self._camera_target)
+        center_xz = 0.5 * (
+            positions[:, [0, 2]].min(axis=0) + positions[:, [0, 2]].max(axis=0)
+        )
+        camera_position = (
+            center_xz[0] + self._camera_offset_xz[0],
+            self._camera_height,
+            center_xz[1] + self._camera_offset_xz[1],
+        )
+        camera_target = (
+            center_xz[0],
+            self._camera_target_height,
+            center_xz[1],
+        )
+        self._ps.look_at(camera_position, camera_target)
 
     def save_frame(
         self,
@@ -245,17 +273,32 @@ def make_single_camera_renderer(
             azimuth=float(camera.azimuth),
         )
     if backend == "polyscope":
+        appearance = render_cfg.appearance
         return PolyscopeRenderer(
             triangles,
             bounds,
-            elevation=float(camera.elevation),
-            azimuth=float(camera.azimuth),
-            distance_scale=float(camera.distance_scale),
+            camera_offset_xz=tuple(float(value) for value in camera.offset_xz),
+            camera_height=float(camera.height),
+            camera_target_height=float(camera.target_height),
             image_width=int(render_cfg.image_width),
             image_height=int(render_cfg.image_height),
             engine=str(render_cfg.engine),
             material=str(render_cfg.material),
-            ground_plane=str(render_cfg.ground_plane),
+            background_color=(
+                None
+                if appearance.background_color is None
+                else tuple(float(value) for value in appearance.background_color)
+            ),
+            cloth_color=tuple(float(value) for value in appearance.cloth_color),
+            edge_width=float(appearance.edge_width),
+            smooth_shade=bool(appearance.smooth_shade),
+            ground_color=tuple(float(value) for value in appearance.ground_color),
+            ground_margin=float(appearance.ground_margin),
+            ground_height=float(appearance.ground_height),
+            control_color=tuple(float(value) for value in appearance.control_color),
+            control_radius=float(appearance.control_radius),
+            target_color=tuple(float(value) for value in appearance.target_color),
+            target_radius=float(appearance.target_radius),
         )
     raise ValueError(f"unsupported render backend: {backend}")
 

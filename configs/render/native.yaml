@@ -8,10 +8,12 @@ engine: auto
 image_width: 1280
 image_height: 720
 material: wax
+# Polyscope's C++ default used by cpp/apps/optimization.cpp.
+ground_plane: tile_reflection
 camera:
   # Matches cpp/apps/optimization.cpp for the default 0.9 x 0.9 cloth.
-  offset_xz: [1.3, 1.3]
-  height: 1.3
+  offset_xz: [0.8, 0.8]
+  height: 0.8
   target_height: 0.3
 appearance:
   # null preserves Polyscope's original default background.

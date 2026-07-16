@@ -91,6 +91,7 @@ class PolyscopeRenderer:
         image_height: int = 720,
         engine: str = "auto",
         material: str = "wax",
+        ground_plane: str = "tile_reflection",
         background_color: tuple[float, float, float] | None = None,
         cloth_color: tuple[float, float, float] = (0.3, 0.7, 0.9),
         edge_width: float = 1.0,
@@ -124,6 +125,11 @@ class PolyscopeRenderer:
         }
         if engine not in engine_names:
             raise ValueError("native render engine must be auto, egl, or glfw")
+        ground_plane_modes = {"none", "tile", "tile_reflection", "shadow_only"}
+        if ground_plane not in ground_plane_modes:
+            raise ValueError(
+                "native ground_plane must be none, tile, tile_reflection, or shadow_only"
+            )
 
         self._ps = ps
         self._triangles = np.asarray(triangles, dtype=np.int64)
@@ -160,8 +166,9 @@ class PolyscopeRenderer:
         ps.set_front_dir("z_front")
         ps.set_window_size(int(image_width), int(image_height))
         ps.set_window_resizable(False)
-        # The original Optimization app registers its own gray ground mesh.
-        ps.set_ground_plane_mode("none")
+        # The original C++ app leaves Polyscope's TileReflection ground enabled
+        # behind its finite gray ground mesh.
+        ps.set_ground_plane_mode(ground_plane)
         if background_color is not None:
             ps.set_background_color(tuple(float(value) for value in background_color))
 
@@ -284,6 +291,7 @@ def make_single_camera_renderer(
             image_height=int(render_cfg.image_height),
             engine=str(render_cfg.engine),
             material=str(render_cfg.material),
+            ground_plane=str(render_cfg.ground_plane),
             background_color=(
                 None
                 if appearance.background_color is None

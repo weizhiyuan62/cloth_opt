@@ -51,14 +51,16 @@ render=debug     Matplotlib with controlled and target markers
 `native` uses the same Polyscope rendering stack as the original simulator
 executables. Its defaults reproduce `cpp/apps/optimization.cpp`: cloth color
 `[0.3, 0.7, 0.9]`, wax material, edge width `1.0`, gray ground
-`[0.5, 0.5, 0.5]`, red control points, and the same camera offsets. The green
-target marker is an additional Python-rollout diagnostic. All of these values
-can be adjusted under `configs/render/native.yaml`; for example:
+`[0.5, 0.5, 0.5]`, red control points, the same camera offsets, and Polyscope's
+default `tile_reflection` environment ground behind the finite gray table. The
+green target marker is an additional Python-rollout diagnostic. All of these
+values can be adjusted under `configs/render/native.yaml`; for example:
 
 ```bash
 python scripts/symmetric_fold.py render=native \
   render.appearance.background_color='[0.95,0.95,0.95]' \
   render.appearance.cloth_color='[0.8,0.2,0.2]' \
+  render.ground_plane=shadow_only \
   render.camera.height=1.0
 ```
 

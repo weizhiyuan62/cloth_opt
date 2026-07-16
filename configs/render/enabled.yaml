@@ -6,6 +6,7 @@ engine: auto
 image_width: 1280
 image_height: 720
 material: wax
+ground_plane: tile_reflection
 camera:
   offset_xz: [0.8, 0.8]
   height: 0.8
